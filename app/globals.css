@@ -1,10 +1,22 @@
 /* app/globals.css */
-html, body {
-    margin: 0;
-    padding: 0;
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  }
-  a { color: #2563eb; text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  nav { border-bottom: 1px solid #eee; }
-  
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---- tiny design tokens used by the new pages ---- */
+:root {
+  --ring: 0 0% 0% / 7%;
+}
+
+.container-nice {
+  @apply mx-auto max-w-6xl px-4;
+}
+
+.hero-gradient {
+  background: radial-gradient(1200px 600px at 20% -10%, rgba(59,130,246,0.08), transparent 60%),
+              radial-gradient(1000px 500px at 90% 0%, rgba(147,197,253,0.12), transparent 60%);
+}
+
+.shadow-soft {
+  box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 30px rgba(0,0,0,.06);
+}

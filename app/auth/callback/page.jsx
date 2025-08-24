@@ -1,24 +1,30 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 
 export default function AuthCallback() {
+  const [status, setStatus] = useState("Finishing login…");
   const router = useRouter();
 
   useEffect(() => {
-    async function run() {
-      // Explicitly handle the magic-link callback
-      const { error } = await supabase.auth.exchangeCodeForSession(window.location.href);
-      // Ignore "No code in url" in case Supabase already handled it
-      router.replace("/checkout");
-    }
-    run();
+    (async () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get("code");
+        if (code) await supabase.auth.exchangeCodeForSession({ code });
+        setStatus("Login complete. Redirecting…");
+        setTimeout(() => router.push("/"), 900);
+      } catch (e) {
+        console.error(e);
+        setStatus("Login failed. Try again from the Login page.");
+      }
+    })();
   }, [router]);
 
   return (
-    <main style={{ padding: 24 }}>
-      <h1>Signing you in…</h1>
+    <main className="container-nice py-16">
+      <p>{status}</p>
     </main>
   );
 }

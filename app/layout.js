@@ -10,13 +10,18 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body style={{ fontFamily: "system-ui, -apple-system, Segoe UI, Roboto" }}>
-        <nav style={{ padding: 12, borderBottom: "1px solid #eee" }}>
-          <Link href="/" style={{ marginRight: 12 }}>Home</Link>
-          <Link href="/login" style={{ marginRight: 12 }}>Log in</Link>
-          <Link href="/checkout">Upgrade</Link>
+      <body className="text-gray-900 antialiased">
+        <nav className="border-b">
+          <div className="container-nice h-14 flex items-center gap-6">
+            <Link href="/" className="font-medium">Home</Link>
+            <Link href="/login" className="text-gray-600 hover:text-gray-900">Log in</Link>
+            <Link href="/checkout" className="text-gray-600 hover:text-gray-900">Upgrade</Link>
+            <div className="ml-auto">
+              {/* right side empty for now */}
+            </div>
+          </div>
         </nav>
-        <main style={{ padding: 24 }}>{children}</main>
+        <main>{children}</main>
       </body>
     </html>
   );

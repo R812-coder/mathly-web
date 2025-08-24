@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>Mathly Login</title></head>
+  <body>
+    <p>Finishing login…</p>
+    <script src="vendor/supabase.js"></script>
+    <script type="module">
+      const SUPABASE_URL = "https://jgnmpuvhyxwlwdzullux.supabase.co"; // your proj
+      const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impnbm1wdXZoeXh3bHdkenVsbHV4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU2MjE4MzYsImV4cCI6MjA3MTE5NzgzNn0.ikkYJ906oPoaC1xWS2K22-k4FmDSUUpLVNKWUAHAfNI"; // same as website
+      const supabase = window.Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: { persistSession: true, detectSessionInUrl: true }
+      });
+
+      const code = new URLSearchParams(location.search).get("code");
+      (async () => {
+        try {
+          if (code) await supabase.auth.exchangeCodeForSession({ code });
+          document.body.innerHTML = "<p>Login complete — you can close this tab.</p>";
+        } catch (e) {
+          console.error(e);
+          document.body.innerHTML = "<p>Login failed. Please retry from the extension.</p>";
+        }
+      })();
+    </script>
+  </body>
+</html>
