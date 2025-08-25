@@ -1,20 +1,21 @@
-/* app/globals.css */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-/* ---- tiny design tokens used by the new pages ---- */
-:root {
-  --ring: 0 0% 0% / 7%;
-}
+/* ---- tiny tokens ---- */
+:root { --ring: 0 0% 0% / 7%; }
 
+/* No @apply in v4, write explicit CSS */
 .container-nice {
-  @apply mx-auto max-w-6xl px-4;
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 72rem;         /* ~6xl */
+  padding-left: 1rem;
+  padding-right: 1rem;
 }
 
 .hero-gradient {
-  background: radial-gradient(1200px 600px at 20% -10%, rgba(59,130,246,0.08), transparent 60%),
-              radial-gradient(1000px 500px at 90% 0%, rgba(147,197,253,0.12), transparent 60%);
+  background:
+    radial-gradient(1200px 600px at 20% -10%, rgba(59,130,246,0.08), transparent 60%),
+    radial-gradient(1000px 500px at 90% 0%, rgba(147,197,253,0.12), transparent 60%);
 }
 
 .shadow-soft {
