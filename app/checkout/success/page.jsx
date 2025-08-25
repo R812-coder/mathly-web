@@ -1,6 +1,6 @@
 "use client";
 import { useState, useMemo, useCallback } from "react";
-import { supabase } from "../../lib/supabaseClient";
+import { supabase } from "../../../lib/supabaseClient";
 
 const API     = process.env.NEXT_PUBLIC_BACKEND_URL;
 const PRICE_M = process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY;
