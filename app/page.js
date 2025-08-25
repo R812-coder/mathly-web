@@ -110,42 +110,155 @@ export default function HomePage() {
 
 
       {/* What Mathly does */}
-      <section className="container-nice py-16">
-        <h2 className="text-2xl font-semibold">What Mathly does</h2>
-        <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {[
-            ["Solves & explains", "Get clean, Photomath-style steps with real understanding."],
-            ["Tutor mode", "Ask follow-ups like “Explain like I’m 12” or “What’s next?”"],
-            ["Works anywhere", "Docs, PDFs, Canvas, LMS, or snap any screen region."],
-            ["Study smarter", "Track weak spots and trends as you practice."],
-            ["Premium accuracy", "Upgraded models & speed on Pro."],
-            ["Privacy first", "Your content stays on your device until you ask us to solve."],
-          ].map(([title, body]) => (
-            <div key={title} className="rounded-2xl border p-5 hover:shadow-soft transition-shadow">
-              <div className="font-medium">{title}</div>
-              <p className="mt-2 text-gray-600 text-sm">{body}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+<section className="container-nice py-20">
+  <h2 className="text-2xl font-semibold">What Mathly does</h2>
+
+  <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+    {/* 1 */}
+    <div className="feature-card">
+      <span className="icon-dot">
+        {/* sparkles */}
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 2l1.4 4.3L18 7.5l-4.6 1.3L12 13l-1.4-4.2L6 7.5l4.6-1.2L12 2zM4 14l.8 2.6L8 18l-2.7.7L4 21l-.8-2.3L1 18l2.2-1.4L4 14zm16 0l.8 2.6L24 18l-2.7.7L20 21l-.8-2.3L17 18l2.2-1.4.8-2.6z"/>
+        </svg>
+      </span>
+      <div className="mt-3 font-medium">Solves & explains</div>
+      <p className="mt-1 text-gray-600 text-sm">
+        Clean, Photomath-style steps plus real explanations.
+      </p>
+    </div>
+
+    {/* 2 */}
+    <div className="feature-card">
+      <span className="icon-dot">
+        {/* chat bubble */}
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M21 6a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v9a3 3 0 0 0 3 3h2v3l4-3h6a3 3 0 0 0 3-3V6z"/>
+        </svg>
+      </span>
+      <div className="mt-3 font-medium">Tutor mode</div>
+      <p className="mt-1 text-gray-600 text-sm">
+        Ask follow-ups like “Explain like I’m 12” or “What’s next?”
+      </p>
+    </div>
+
+    {/* 3 */}
+    <div className="feature-card">
+      <span className="icon-dot">
+        {/* window */}
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M3 4h18v16H3zM3 8h18" stroke="currentColor" strokeWidth="2" fill="none"/>
+        </svg>
+      </span>
+      <div className="mt-3 font-medium">Works anywhere</div>
+      <p className="mt-1 text-gray-600 text-sm">
+        Docs, PDFs, Canvas, LMS—or snap any region of your screen.
+      </p>
+    </div>
+
+    {/* 4 */}
+    <div className="feature-card">
+      <span className="icon-dot">
+        {/* chart */}
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M4 20V10h3v10H4zm6 0V4h3v16h-3zm6 0v-7h3v7h-3z"/>
+        </svg>
+      </span>
+      <div className="mt-3 font-medium">Study smarter</div>
+      <p className="mt-1 text-gray-600 text-sm">
+        Track weak spots and trends as you practice.
+      </p>
+    </div>
+
+    {/* 5 */}
+    <div className="feature-card">
+      <span className="icon-dot">
+        {/* target */}
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16zm0-4a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/>
+        </svg>
+      </span>
+      <div className="mt-3 font-medium">Premium accuracy</div>
+      <p className="mt-1 text-gray-600 text-sm">
+        Upgraded models & priority speed on Pro.
+      </p>
+    </div>
+
+    {/* 6 */}
+    <div className="feature-card">
+      <span className="icon-dot">
+        {/* shield */}
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 2l8 4v6c0 5-3.5 9-8 10-4.5-1-8-5-8-10V6l8-4z"/>
+        </svg>
+      </span>
+      <div className="mt-3 font-medium">Privacy first</div>
+      <p className="mt-1 text-gray-600 text-sm">
+        Your content stays on your device until you ask us to solve.
+      </p>
+    </div>
+  </div>
+</section>
+
 
       {/* How it works */}
-      <section className="container-nice py-16">
-        <h2 className="text-2xl font-semibold">How it works</h2>
-        <ol className="mt-6 grid gap-6 sm:grid-cols-3">
-          {[
-            ["Highlight or snap", "Select an equation in your doc or use SnapSolve."],
-            ["Get steps instantly", "See neat, compact steps with math rendering."],
-            ["Ask the tutor", "ELI12, next step, where you went wrong—right in the popup."],
-          ].map(([t, b], i) => (
-            <li key={t} className="rounded-2xl border p-5">
-              <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-white">{i+1}</div>
-              <div className="mt-3 font-medium">{t}</div>
-              <p className="text-sm text-gray-600 mt-2">{b}</p>
-            </li>
-          ))}
-        </ol>
-      </section>
+<section className="container-nice py-20">
+  <h2 className="text-2xl font-semibold">How it works</h2>
+
+  <div className="mt-8 steps">
+    {/* connecting rail (hidden on mobile) */}
+    <div className="steps-rail hidden sm:block"></div>
+
+    <div className="grid gap-6 sm:grid-cols-3">
+      {/* Step 1 */}
+      <div className="step-card relative">
+        <div className="badge-num">1</div>
+        <div className="mt-3 font-medium">Highlight or snap</div>
+        <p className="text-sm text-gray-600 mt-2">
+          Select an equation in your doc—or capture any area with SnapSolve.
+        </p>
+
+        {/* mini illus */}
+        <div className="mt-4 rounded-lg border p-3 bg-gray-50/60">
+          <div className="h-20 rounded-md bg-white border grid place-content-center text-gray-400">
+            Doc area
+          </div>
+        </div>
+      </div>
+
+      {/* Step 2 */}
+      <div className="step-card relative">
+        <div className="badge-num">2</div>
+        <div className="mt-3 font-medium">Get steps instantly</div>
+        <p className="text-sm text-gray-600 mt-2">
+          See neat, compact steps with math rendering—right away.
+        </p>
+
+        <div className="mt-4 rounded-lg border p-3 bg-gray-50/60">
+          <div className="h-20 rounded-md bg-white border grid place-content-center text-gray-400">
+            Steps panel
+          </div>
+        </div>
+      </div>
+
+      {/* Step 3 */}
+      <div className="step-card relative">
+        <div className="badge-num">3</div>
+        <div className="mt-3 font-medium">Ask the tutor</div>
+        <p className="text-sm text-gray-600 mt-2">
+          ELI12, next step, where you went wrong—without leaving your page.
+        </p>
+
+        <div className="mt-4 rounded-lg border p-3 bg-gray-50/60">
+          <div className="h-20 rounded-md bg-white border grid place-content-center text-gray-400">
+            Chat bubble
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 
       {/* Pricing */}
       <section className="container-nice py-16">
