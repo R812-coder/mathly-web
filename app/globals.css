@@ -137,3 +137,8 @@
     pointer-events: none;
   }
   
+  @media (max-width: 640px){
+    .hero-v2 h1{ font-size: 2rem; line-height: 1.15; }
+    .hero-v2 .glass-card{ margin-top: 8px; }
+  }
+  

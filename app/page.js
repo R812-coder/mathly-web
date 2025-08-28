@@ -13,29 +13,48 @@ export default function HomePage() {
       </h1>
 
       <p className="mt-4 text-lg text-gray-600">
-        Highlight a problem in Google Docs, PDFs, Canvas—snap from any page—
-        and Mathly shows clean steps with explanations at your level. No more
-        tab-switching.
-      </p>
+  Highlight an equation on any page and get clean, Photomath-style steps
+  with explanations at your level — without leaving your doc.
+</p>
 
-      <div className="mt-8 flex flex-wrap gap-3">
-        <a
-          href="/checkout"
-          className="rounded-xl bg-blue-600 px-6 py-3 text-white hover:bg-blue-700 shadow-soft"
-        >
-          Upgrade to Pro
-        </a>
-        <a
-          href="/login"
-          className="rounded-xl border px-6 py-3 hover:bg-black/5"
-        >
-          Try free
-        </a>
-      </div>
 
-      <p className="mt-3 text-sm text-gray-500">
-        Free: 10 problems/day · Pro: unlimited & priority speed
-      </p>
+      <div className="mt-8 flex flex-wrap items-center gap-3">
+  <a
+    href="/login"
+    className="rounded-xl bg-blue-600 px-6 py-3 text-white hover:bg-blue-700 shadow-soft"
+    data-track="cta_try_free_top"
+  >
+    Try free
+  </a>
+  <a
+    href="/checkout"
+    className="rounded-xl border px-6 py-3 hover:bg-black/5"
+    data-track="cta_upgrade_top"
+  >
+    Upgrade to Pro
+  </a>
+  <span className="ml-1 text-sm text-gray-500">
+    No credit card • 60-sec install
+  </span>
+</div>
+
+<ul className="mt-5 flex flex-wrap items-center gap-4 text-sm text-gray-600">
+  <li className="inline-flex items-center gap-2">
+    <img src="/window.svg" alt="" className="w-4 h-4" />
+    Works in Docs & PDFs
+  </li>
+  <li className="inline-flex items-center gap-2">
+    <img src="/globe.svg" alt="" className="w-4 h-4" />
+    Canvas / LMS
+  </li>
+  <li className="inline-flex items-center gap-2">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-green-600">
+      <path d="M9 16.2l-3.5-3.5-1.4 1.4L9 19 20.3 7.7l-1.4-1.4z"/>
+    </svg>
+    Private by default
+  </li>
+</ul>
+
     </div>
 
     {/* Right illustration */}
