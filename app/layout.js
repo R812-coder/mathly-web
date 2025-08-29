@@ -49,6 +49,15 @@ export default function RootLayout({ children }) {
           </div>
         </footer>
       </body>
+
+      <html lang="en">
+  <head>
+    <link rel="preconnect" href="https://checkout.stripe.com" crossOrigin="" />
+    <link rel="preconnect" href="https://js.stripe.com" crossOrigin="" />
+  </head>
+  <body>…</body>
+</html>
+
     </html>
   );
 }

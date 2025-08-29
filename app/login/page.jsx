@@ -73,6 +73,15 @@ export default function LoginPage() {
           >
             {busy ? "Sending…" : "Send magic link"}
           </button>
+
+          <button
+  type="submit"
+  disabled={busy || cooldown > 0}
+  className="w-full rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white shadow-soft hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
+>
+  {cooldown > 0 ? `Retry in ${cooldown}s` : busy ? "Sending…" : "Send magic link"}
+</button>
+
         </form>
 
         {msg && <p className="mt-3 text-sm text-gray-600">{msg}</p>}
@@ -83,4 +92,40 @@ export default function LoginPage() {
       </div>
     </main>
   );
+}
+// app/login/page.jsx (additions)
+const [cooldown, setCooldown] = useState(0);
+
+async function onSubmit(e) {
+  e.preventDefault();
+  if (cooldown > 0) return;
+  setBusy(true);
+  setMsg("Sending…");
+  const origin = window.location.origin;
+  const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(next)}`;
+
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo: redirectTo, shouldCreateUser: true },
+  });
+
+  setBusy(false);
+
+  if (error) {
+    const txt = error.message?.toLowerCase() || "";
+    if (txt.includes("rate") && txt.includes("limit")) {
+      setMsg("We just sent you a link. You can request another in 60s.");
+      setCooldown(60);
+      const t = setInterval(() => {
+        setCooldown(s => {
+          if (s <= 1) { clearInterval(t); return 0; }
+          return s - 1;
+        });
+      }, 1000);
+    } else {
+      setMsg(`Error: ${error.message}`);
+    }
+  } else {
+    setMsg("Check your email for the magic link!");
+  }
 }
