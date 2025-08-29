@@ -1,8 +1,8 @@
 "use client";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { supabase } from "../../../lib/supabaseClient";
 
-const API     = process.env.NEXT_PUBLIC_BACKEND_URL;
+
 const PRICE_M = process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY;
 const PRICE_Y = process.env.NEXT_PUBLIC_STRIPE_PRICE_YEARLY;
 
@@ -11,32 +11,48 @@ export default function SuccessPage() {
   const [loading, setLoading] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
   const [plan, setPlan] = useState("monthly");
+
+  // If someone hits /checkout/success?plan=yearly, honor it.
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const qPlan = p.get("plan");
+    if (qPlan === "yearly" || qPlan === "monthly") setPlan(qPlan);
+  }, []);
+
   const chosenPrice = useMemo(() => (plan === "yearly" ? PRICE_Y : PRICE_M), [plan]);
+
+  // Centralized login bounce that preserves plan + any query/hash
+  const redirectToLogin = useCallback(() => {
+    const next = encodeURIComponent(`${window.location.pathname}${window.location.search}${window.location.hash}`);
+    window.location.href = `/login?next=${next}`;
+  }, []);
 
   const goToCheckout = useCallback(async () => {
     setMsg("");
     setLoading(true);
+
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) {
-             setLoading(false);
-             const next = encodeURIComponent(window.location.pathname);
-             window.location.href = `/login?next=${next}`;
-             return;
-           }
+    if (!session?.access_token) { setLoading(false); redirectToLogin(); return; }
 
     try {
-      const res = await fetch(`${API}/create-checkout-session`, {
+        const res = await fetch("/api/create-checkout-session", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ priceId: chosenPrice })
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ priceId: chosenPrice }),
       });
 
       if (res.status === 401) {
-        const j = await res.json().catch(() => ({}));
-        const next = encodeURIComponent(window.location.pathname);
-               window.location.href = j.login_url || `/login?next=${next}`;
+        // Try to read a login_url if the backend provides one; otherwise bounce to /login
+        let j = {};
+        try { j = await res.json(); } catch {}
+        if (j?.login_url) window.location.href = j.login_url;
+        else redirectToLogin();
         return;
       }
+
       const { url } = await res.json();
       if (!url) throw new Error("No checkout url");
       window.location.href = url;
@@ -46,26 +62,25 @@ export default function SuccessPage() {
     } finally {
       setLoading(false);
     }
-  }, [chosenPrice]);
+  }, [chosenPrice, redirectToLogin]);
 
   const openPortal = useCallback(async () => {
     setMsg("");
     setPortalLoading(true);
+
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) {
-             setPortalLoading(false);
-             const next = encodeURIComponent(window.location.pathname);
-             window.location.href = `/login?next=${next}`;
-             return;
-           }
+    if (!session?.access_token) { setPortalLoading(false); redirectToLogin(); return; }
 
     try {
-      const r = await fetch(`${API}/create-portal-session`, {
+        const r = await fetch("/api/create-portal-session", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` }
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j?.error || "portal_error");
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j?.url) throw new Error(j?.error || "portal_error");
       window.location.href = j.url;
     } catch (e) {
       console.error(e);
@@ -73,7 +88,7 @@ export default function SuccessPage() {
     } finally {
       setPortalLoading(false);
     }
-  }, []);
+  }, [redirectToLogin]);
 
   return (
     <main className="container-nice py-16">
@@ -82,7 +97,33 @@ export default function SuccessPage() {
         <p className="mt-2 text-gray-600">Unlimited solves • Priority speed • Step-by-step tutor mode</p>
       </div>
 
-      <div className="mt-8 flex flex-wrap gap-3">
+      {/* Optional: simple plan toggle */}
+      <div className="mt-4 flex gap-3 text-sm">
+        <button
+          className={`rounded-xl border px-3 py-1 ${plan==='monthly' ? 'bg-black/5' : ''}`}
+          onClick={() => {
+            setPlan("monthly");
+            const u = new URL(window.location.href);
+            u.searchParams.set("plan", "monthly");
+            window.history.replaceState({}, "", u);
+          }}
+        >
+          Monthly
+        </button>
+        <button
+          className={`rounded-xl border px-3 py-1 ${plan==='yearly' ? 'bg-black/5' : ''}`}
+          onClick={() => {
+            setPlan("yearly");
+            const u = new URL(window.location.href);
+            u.searchParams.set("plan", "yearly");
+            window.history.replaceState({}, "", u);
+          }}
+        >
+          Yearly
+        </button>
+      </div>
+
+      <div className="mt-6 flex flex-wrap gap-3">
         <button
           onClick={goToCheckout}
           disabled={loading}
