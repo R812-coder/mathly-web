@@ -1,19 +1,20 @@
 "use client";
+export const dynamic = "force-dynamic"; // don't prerender; render on request
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-export default function SupportPage() {
+function SupportContent() {
   const sp = useSearchParams();
 
   const type = (sp.get("type") === "feature" ? "feature" : "bug");
   const [email, setEmail] = useState("");
+  const [desc, setDesc] = useState("");
 
   const context = useMemo(() => {
     const raw = sp.get("ctx");
     if (!raw) return "";
     try {
-      // ctx might be urlencoded JSON or a plain string
       const dec = decodeURIComponent(raw);
       const obj = JSON.parse(dec);
       return JSON.stringify(obj, null, 2);
@@ -21,8 +22,6 @@ export default function SupportPage() {
       try { return decodeURIComponent(raw); } catch { return raw; }
     }
   }, [sp]);
-
-  const [desc, setDesc] = useState("");
 
   const subject = type === "feature" ? "Feature request" : "Bug report";
   const mailto = useMemo(() => {
@@ -39,12 +38,8 @@ export default function SupportPage() {
 
   return (
     <main className="container-nice py-16 max-w-2xl">
-      <h1 className="text-3xl font-semibold tracking-tight">
-        {subject}
-      </h1>
-      <p className="mt-2 text-gray-600">
-        Tell us what happened and we’ll jump on it.
-      </p>
+      <h1 className="text-3xl font-semibold tracking-tight">{subject}</h1>
+      <p className="mt-2 text-gray-600">Tell us what happened and we’ll jump on it.</p>
 
       <div className="mt-6 space-y-4">
         <label className="block text-sm font-medium text-gray-700">
@@ -83,7 +78,6 @@ export default function SupportPage() {
           >
             Send email
           </a>
-
           <button
             onClick={() => navigator.clipboard.writeText(
               `${subject}\n${email ? `Email: ${email}\n` : ""}\n${desc}\n\n${context ? `Context:\n${context}` : ""}`
@@ -95,5 +89,13 @@ export default function SupportPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function SupportPage() {
+  return (
+    <Suspense fallback={<main className="container-nice py-16"><p>Loading…</p></main>}>
+      <SupportContent />
+    </Suspense>
   );
 }
