@@ -14,9 +14,9 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <head>
-        {/* Perf: Stripe preconnects */}
-        <link rel="preconnect" href="https://checkout.stripe.com" crossOrigin="" />
-        <link rel="preconnect" href="https://js.stripe.com" crossOrigin="" />
+        {/* Optional: tiny perf win for Stripe */}
+        <link rel="preconnect" href="https://checkout.stripe.com" />
+        <link rel="preconnect" href="https://js.stripe.com" />
       </head>
       <body className={`${inter.className} antialiased bg-white text-gray-900`}>
         {/* Top nav */}
@@ -46,9 +46,7 @@ export default function RootLayout({ children }) {
               <div className="flex gap-6">
                 <Link className="hover:text-gray-900" href="/login">Log in</Link>
                 <Link className="hover:text-gray-900" href="/checkout/success">Pricing</Link>
-                <Link className="hover:text-gray-900" href="/support/bug">Report a bug</Link>
-                <Link className="hover:text-gray-900" href="/support/feature">Request a feature</Link>
-                <a className="hover:text-gray-900" href="mailto:support@mathly.app">Support</a>
+                <a className="hover:text-gray-900" href="mailto:support@getmathly.com">Support</a>
               </div>
             </div>
           </div>
