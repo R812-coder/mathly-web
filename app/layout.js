@@ -13,6 +13,11 @@ const inter = Inter({ subsets: ["latin"] });
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
+      <head>
+        {/* Perf: Stripe preconnects */}
+        <link rel="preconnect" href="https://checkout.stripe.com" crossOrigin="" />
+        <link rel="preconnect" href="https://js.stripe.com" crossOrigin="" />
+      </head>
       <body className={`${inter.className} antialiased bg-white text-gray-900`}>
         {/* Top nav */}
         <nav className="sticky top-0 z-50 border-b bg-white/80 backdrop-blur">
@@ -21,7 +26,6 @@ export default function RootLayout({ children }) {
             <Link href="/login" className="text-gray-600 hover:text-gray-900">Log in</Link>
             <Link href="/checkout/success" className="text-gray-600 hover:text-gray-900">Upgrade</Link>
             <div className="ml-auto">
-              {/* CHANGED: /checkout -> /checkout/success  (use ?plan=yearly to preselect yearly) */}
               <Link
                 href="/checkout/success"
                 className="inline-flex items-center justify-center rounded-xl px-4 py-2 font-semibold bg-blue-600 text-white hover:bg-blue-700 shadow-soft"
@@ -41,23 +45,15 @@ export default function RootLayout({ children }) {
               <div>© {new Date().getFullYear()} Mathly</div>
               <div className="flex gap-6">
                 <Link className="hover:text-gray-900" href="/login">Log in</Link>
-                {/* CHANGED: /checkout -> /checkout/success */}
                 <Link className="hover:text-gray-900" href="/checkout/success">Pricing</Link>
+                <Link className="hover:text-gray-900" href="/support/bug">Report a bug</Link>
+                <Link className="hover:text-gray-900" href="/support/feature">Request a feature</Link>
                 <a className="hover:text-gray-900" href="mailto:support@mathly.app">Support</a>
               </div>
             </div>
           </div>
         </footer>
       </body>
-
-      <html lang="en">
-  <head>
-    <link rel="preconnect" href="https://checkout.stripe.com" crossOrigin="" />
-    <link rel="preconnect" href="https://js.stripe.com" crossOrigin="" />
-  </head>
-  <body>…</body>
-</html>
-
     </html>
   );
 }
