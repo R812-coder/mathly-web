@@ -17,7 +17,12 @@ export default function SuccessPage() {
     setMsg("");
     setLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) { setLoading(false); setMsg("Please log in first."); return; }
+    if (!session?.access_token) {
+             setLoading(false);
+             const next = encodeURIComponent(window.location.pathname);
+             window.location.href = `/login?next=${next}`;
+             return;
+           }
 
     try {
       const res = await fetch(`${API}/create-checkout-session`, {
@@ -28,7 +33,8 @@ export default function SuccessPage() {
 
       if (res.status === 401) {
         const j = await res.json().catch(() => ({}));
-        window.location.href = j.login_url || "/login";
+        const next = encodeURIComponent(window.location.pathname);
+               window.location.href = j.login_url || `/login?next=${next}`;
         return;
       }
       const { url } = await res.json();
@@ -46,7 +52,12 @@ export default function SuccessPage() {
     setMsg("");
     setPortalLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) { setPortalLoading(false); setMsg("Please log in first."); return; }
+    if (!session?.access_token) {
+             setPortalLoading(false);
+             const next = encodeURIComponent(window.location.pathname);
+             window.location.href = `/login?next=${next}`;
+             return;
+           }
 
     try {
       const r = await fetch(`${API}/create-portal-session`, {
