@@ -2,12 +2,13 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { supabase } from "../../../lib/supabaseClient";
 
-
+const API = process.env.NEXT_PUBLIC_BACKEND_URL;
 const PRICE_M = process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY;
 const PRICE_Y = process.env.NEXT_PUBLIC_STRIPE_PRICE_YEARLY;
 
 export default function SuccessPage() {
   const [msg, setMsg] = useState("");
+  const [isPro, setIsPro] = useState(false);
   const [loading, setLoading] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
   const [plan, setPlan] = useState("monthly");
@@ -35,7 +36,7 @@ export default function SuccessPage() {
     if (!session?.access_token) { setLoading(false); redirectToLogin(); return; }
 
     try {
-        const res = await fetch("/api/create-checkout-session", {
+        const res = await fetch(`${API}/create-checkout-session`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -72,7 +73,7 @@ export default function SuccessPage() {
     if (!session?.access_token) { setPortalLoading(false); redirectToLogin(); return; }
 
     try {
-        const r = await fetch("/api/create-portal-session", {
+        const r = await fetch(`${API}/create-portal-session`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -89,6 +90,24 @@ export default function SuccessPage() {
       setPortalLoading(false);
     }
   }, [redirectToLogin]);
+  // Poll entitlement while we're on the success page
+  useEffect(() => {
+        let timer;
+        const poll = async () => {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session?.access_token) return; // user not logged in on web
+          try {
+            const r = await fetch(`${API}/entitlement`, {
+              headers: { Authorization: `Bearer ${session.access_token}` },
+            });
+            const j = await r.json();
+            if (j?.premium) { setIsPro(true); setMsg(""); return; }
+          } catch {}
+          timer = setTimeout(poll, 2000); // try again in 2s
+        };
+        poll();
+        return () => clearTimeout(timer);
+      }, []);
 
   return (
     <main className="container-nice py-16">
