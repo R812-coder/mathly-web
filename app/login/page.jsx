@@ -1,27 +1,35 @@
+// app/login/page.jsx
 "use client";
-
-
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { supabase } from "../../lib/supabaseClient";
+import { useSearchParams } from "next/navigation";
+import { supabase } from "@/lib/supabaseClient";
 
 export default function LoginPage() {
+  const sp = useSearchParams();
+  const [tab, setTab] = useState("login"); // "login" | "signup"
   const [email, setEmail] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [cooldown, setCooldown] = useState(0);
-  const [next, setNext] = useState("/");
+  const next = sp.get("next") || "/";
 
   useEffect(() => {
-    const p = new URLSearchParams(window.location.search);
-    setNext(p.get("next") || "/");
-  }, []);
+    // If user already logged in, send them where they wanted to go
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        window.location.replace(next);
+      }
+    })();
+  }, [next]);
+
+  const callbackUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
 
   async function onGoogle() {
-    const origin = window.location.origin;
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}` },
+      options: { redirectTo: callbackUrl },
     });
   }
 
@@ -30,14 +38,11 @@ export default function LoginPage() {
     if (cooldown > 0) return;
 
     setBusy(true);
-    setMsg("Sending…");
-
-    const origin = window.location.origin;
-    const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(next)}`;
+    setMsg(tab === "signup" ? "Sending sign-up link…" : "Sending login link…");
 
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: redirectTo, shouldCreateUser: true },
+      options: { emailRedirectTo: callbackUrl, shouldCreateUser: true },
     });
 
     setBusy(false);
@@ -64,11 +69,32 @@ export default function LoginPage() {
   return (
     <main className="container-nice py-16">
       <div className="max-w-lg">
-        <h1 className="text-3xl font-semibold tracking-tight">Log in</h1>
-        <p className="mt-2 text-gray-600">We’ll send you a one-click magic link.</p>
+        <h1 className="text-3xl font-semibold tracking-tight">
+          {tab === "signup" ? "Create your account" : "Log in"}
+        </h1>
+        <p className="mt-2 text-gray-600">
+          {tab === "signup"
+            ? "We’ll send you a one-click magic link to finish sign up."
+            : "We’ll send you a one-click magic link to log in."}
+        </p>
       </div>
 
-      <div className="mt-8 max-w-lg rounded-2xl border bg-white p-6 shadow-soft">
+      <div className="mt-6 flex gap-3 text-sm">
+        <button
+          className={`rounded-xl border px-3 py-1 ${tab==='login' ? 'bg-black/5' : ''}`}
+          onClick={() => setTab("login")}
+        >
+          Log in
+        </button>
+        <button
+          className={`rounded-xl border px-3 py-1 ${tab==='signup' ? 'bg-black/5' : ''}`}
+          onClick={() => setTab("signup")}
+        >
+          Create account
+        </button>
+      </div>
+
+      <div className="mt-6 max-w-lg rounded-2xl border bg-white p-6 shadow-soft">
         <button
           onClick={onGoogle}
           className="w-full rounded-xl border px-4 py-3 font-semibold hover:bg-black/5"
@@ -96,11 +122,27 @@ export default function LoginPage() {
             disabled={busy || cooldown > 0}
             className="w-full rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white shadow-soft hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {cooldown > 0 ? `Retry in ${cooldown}s` : busy ? "Sending…" : "Send magic link"}
+            {cooldown > 0
+              ? `Retry in ${cooldown}s`
+              : busy
+              ? (tab === "signup" ? "Sending…" : "Sending…")
+              : (tab === "signup" ? "Send sign-up link" : "Send login link")}
           </button>
         </form>
 
         {msg && <p className="mt-3 text-sm text-gray-600">{msg}</p>}
+
+        <div className="mt-6 text-sm text-gray-600">
+          {tab === "signup" ? (
+            <>Already have an account?{" "}
+              <button onClick={() => setTab("login")} className="text-blue-600 hover:underline">Log in</button>
+            </>
+          ) : (
+            <>New here?{" "}
+              <button onClick={() => setTab("signup")} className="text-blue-600 hover:underline">Create account</button>
+            </>
+          )}
+        </div>
 
         <div className="mt-6 text-sm text-gray-600">
           <Link href="/" className="hover:text-gray-900">← Back home</Link>
