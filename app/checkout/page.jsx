@@ -5,6 +5,8 @@ import { supabase } from "../../lib/supabaseClient";
 
 const PRICE_M = process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY;
 const PRICE_Y = process.env.NEXT_PUBLIC_STRIPE_PRICE_YEARLY;
+// app/checkout/page.jsx
+export const dynamic = "force-dynamic";
 
 export default function UpgradePage() {
   const [plan, setPlan] = useState("monthly");

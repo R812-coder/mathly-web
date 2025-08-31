@@ -1,70 +1,50 @@
 // app/login/page.jsx
 "use client";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { supabase } from "../../lib/supabaseClient";
 
+export const dynamic = "force-dynamic"; // don't prerender this page
 
 export default function LoginPage() {
-  const sp = useSearchParams();
-  const [tab, setTab] = useState("login"); // "login" | "signup"
   const [email, setEmail] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
-  const [cooldown, setCooldown] = useState(0);
-  const next = sp.get("next") || "/";
+  const [tab, setTab] = useState("login"); // "login" | "signup"
+  const [next, setNext] = useState("/");
 
   useEffect(() => {
-    // If user already logged in, send them where they wanted to go
-    (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        window.location.replace(next);
-      }
-    })();
-  }, [next]);
+    const p = new URLSearchParams(window.location.search);
+    setNext(p.get("next") || "/");
+    const mode = p.get("mode");
+    if (mode === "signup") setTab("signup");
+  }, []);
 
-  const callbackUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+  const callback = () =>
+    `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
 
   async function onGoogle() {
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: callbackUrl },
+      options: { redirectTo: callback() },
     });
   }
 
   async function onSubmit(e) {
     e.preventDefault();
-    if (cooldown > 0) return;
-
     setBusy(true);
     setMsg(tab === "signup" ? "Sending sign-up link…" : "Sending login link…");
 
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: callbackUrl, shouldCreateUser: true },
+      options: { emailRedirectTo: callback(), shouldCreateUser: true },
     });
 
     setBusy(false);
-
-    if (error) {
-      const txt = (error.message || "").toLowerCase();
-      if (txt.includes("rate") && txt.includes("limit")) {
-        setMsg("We just sent you a link. You can request another in 60s.");
-        setCooldown(60);
-        const t = setInterval(() => {
-          setCooldown((s) => {
-            if (s <= 1) { clearInterval(t); return 0; }
-            return s - 1;
-          });
-        }, 1000);
-      } else {
-        setMsg(`Error: ${error.message}`);
-      }
-    } else {
-      setMsg("Check your email for the magic link!");
-    }
+    setMsg(
+      error ? `Error: ${error.message}` : "Check your email for the magic link!"
+    );
   }
 
   return (
@@ -75,27 +55,41 @@ export default function LoginPage() {
         </h1>
         <p className="mt-2 text-gray-600">
           {tab === "signup"
-            ? "We’ll send you a one-click magic link to finish sign up."
-            : "We’ll send you a one-click magic link to log in."}
+            ? "Use Google or your email to get started."
+            : "We’ll send you a one-click magic link."}
         </p>
       </div>
 
       <div className="mt-6 flex gap-3 text-sm">
         <button
-          className={`rounded-xl border px-3 py-1 ${tab==='login' ? 'bg-black/5' : ''}`}
-          onClick={() => setTab("login")}
+          onClick={() => {
+            setTab("login");
+            const u = new URL(window.location.href);
+            u.searchParams.delete("mode");
+            window.history.replaceState({}, "", u);
+          }}
+          className={`rounded-xl border px-3 py-1 ${
+            tab === "login" ? "bg-black/5" : ""
+          }`}
         >
           Log in
         </button>
         <button
-          className={`rounded-xl border px-3 py-1 ${tab==='signup' ? 'bg-black/5' : ''}`}
-          onClick={() => setTab("signup")}
+          onClick={() => {
+            setTab("signup");
+            const u = new URL(window.location.href);
+            u.searchParams.set("mode", "signup");
+            window.history.replaceState({}, "", u);
+          }}
+          className={`rounded-xl border px-3 py-1 ${
+            tab === "signup" ? "bg-black/5" : ""
+          }`}
         >
           Create account
         </button>
       </div>
 
-      <div className="mt-6 max-w-lg rounded-2xl border bg-white p-6 shadow-soft">
+      <div className="mt-8 max-w-lg rounded-2xl border bg-white p-6 shadow-soft">
         <button
           onClick={onGoogle}
           className="w-full rounded-xl border px-4 py-3 font-semibold hover:bg-black/5"
@@ -120,14 +114,14 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={busy || cooldown > 0}
+            disabled={busy}
             className="w-full rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white shadow-soft hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {cooldown > 0
-              ? `Retry in ${cooldown}s`
-              : busy
-              ? (tab === "signup" ? "Sending…" : "Sending…")
-              : (tab === "signup" ? "Send sign-up link" : "Send login link")}
+            {busy
+              ? "Sending…"
+              : tab === "signup"
+              ? "Send sign-up link"
+              : "Send login link"}
           </button>
         </form>
 
@@ -135,18 +129,42 @@ export default function LoginPage() {
 
         <div className="mt-6 text-sm text-gray-600">
           {tab === "signup" ? (
-            <>Already have an account?{" "}
-              <button onClick={() => setTab("login")} className="text-blue-600 hover:underline">Log in</button>
+            <>
+              Already have an account?{" "}
+              <button
+                onClick={() => {
+                  setTab("login");
+                  const u = new URL(window.location.href);
+                  u.searchParams.delete("mode");
+                  window.history.replaceState({}, "", u);
+                }}
+                className="underline"
+              >
+                Log in
+              </button>
             </>
           ) : (
-            <>New here?{" "}
-              <button onClick={() => setTab("signup")} className="text-blue-600 hover:underline">Create account</button>
+            <>
+              New here?{" "}
+              <button
+                onClick={() => {
+                  setTab("signup");
+                  const u = new URL(window.location.href);
+                  u.searchParams.set("mode", "signup");
+                  window.history.replaceState({}, "", u);
+                }}
+                className="underline"
+              >
+                Create an account
+              </button>
             </>
           )}
         </div>
 
-        <div className="mt-6 text-sm text-gray-600">
-          <Link href="/" className="hover:text-gray-900">← Back home</Link>
+        <div className="mt-4 text-sm">
+          <Link href="/" className="hover:text-gray-900">
+            ← Back home
+          </Link>
         </div>
       </div>
     </main>
