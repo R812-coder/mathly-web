@@ -22,26 +22,22 @@ export default function SuccessPage() {
     if (qp === "yearly" || qp === "monthly") setPlan(qp);
     if (p.get("session_id")) setJustPaid(true); // ← we came back from Stripe
   }, []);
-// Immediately confirm on return from Stripe (idempotent, succeeds even if webhook is slow)
+
+  // Call confirm API once when we return from Stripe (idempotent, no auth needed)
 useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const sid = p.get("session_id");
+    if (!sid) return;
+  
     (async () => {
-      if (!justPaid) return;
-      const p = new URLSearchParams(window.location.search);
-      const sid = p.get("session_id");
-      if (!sid) return;
-  
-      const { data: { session } = {} } = await supabase.auth.getSession();
-      if (!session?.access_token) return;
-  
       try {
-        await fetch(`/api/confirm-subscription?session_id=${encodeURIComponent(sid)}`, {
-          headers: { Authorization: `Bearer ${session.access_token}` }
-        });
-        // The polling effect that already exists will flip the UI to "Manage subscription"
-        // as soon as the profile row is updated.
+        const r = await fetch(`/api/confirm-subscription?session_id=${encodeURIComponent(sid)}`);
+        // Optional: if you want to reflect success immediately without waiting for polling:
+        // const j = await r.json().catch(()=> ({}));
+        // if (j?.premium) setIsPro(true);
       } catch {}
     })();
-  }, [justPaid]);
+  }, []); // run once on mount
   
   const chosenPrice = useMemo(
     () => (plan === "yearly" ? PRICE_Y : PRICE_M),
@@ -192,6 +188,7 @@ useEffect(() => {
           </button>
         )}
 
+
         {/* Show portal button as soon as entitlement flips */}
         {isPro && (
           <button
@@ -212,6 +209,12 @@ useEffect(() => {
           If you don’t see your subscription right away, give it a minute after checkout.
           Stripe can take a moment to notify our backend.
         </p>
+
+        {/* If header still shows "Log in", give them a finish-sign-in hint */}
+<p className="mt-3 text-sm text-gray-500">
+  Already paid? <a className="underline" href={`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`}>Log in</a> to activate on this device.
+</p>
+
       </section>
     </main>
   );

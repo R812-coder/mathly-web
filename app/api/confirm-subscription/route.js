@@ -7,52 +7,64 @@ export const runtime = "nodejs";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
+// No Supabase user login required: we trust the session_id from Stripe
 export async function GET(req) {
   try {
-    // 1) Auth (same pattern as other APIs)
-    const auth = req.headers.get("authorization") || "";
-    const token = auth.replace("Bearer ", "");
-    if (!token) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-
-    const sb = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-      { global: { headers: { Authorization: `Bearer ${token}` } } }
-    );
-    const { data: { user } = {} } = await sb.auth.getUser();
-    if (!user) return NextResponse.json({ error: "no_user" }, { status: 401 });
-
-    // 2) Grab session_id
     const { searchParams } = new URL(req.url);
     const session_id = searchParams.get("session_id");
-    if (!session_id) return NextResponse.json({ error: "no_session_id" }, { status: 400 });
-
-    // 3) Retrieve Checkout Session (+ subscription)
-    const sess = await stripe.checkout.sessions.retrieve(session_id);
-    const customerId = typeof sess.customer === "string" ? sess.customer : sess.customer?.id;
-    const subId = typeof sess.subscription === "string" ? sess.subscription : sess.subscription?.id;
-
-    // 4) Pull subscription status/period
-    let status = null, current_period_end = null;
-    if (subId) {
-      const sub = await stripe.subscriptions.retrieve(subId);
-      status = sub.status;
-      current_period_end = new Date(sub.current_period_end * 1000).toISOString();
+    if (!session_id) {
+      return NextResponse.json({ error: "no_session_id" }, { status: 400 });
     }
 
-    // 5) Upsert profile (idempotent)
+    // 1) Get the Checkout Session (+subscription)
+    const sess = await stripe.checkout.sessions.retrieve(session_id, {
+      expand: ["subscription"],
+    });
+
+    // We set this when creating the session
+    const supabaseUserId =
+      sess.client_reference_id || sess?.metadata?.supabase_user_id || null;
+
+    const customerId =
+      typeof sess.customer === "string" ? sess.customer : sess.customer?.id;
+
+    // Normalize subscription fields
+    const subObj =
+      typeof sess.subscription === "string"
+        ? await stripe.subscriptions.retrieve(sess.subscription)
+        : sess.subscription || null;
+
+    const subId = subObj?.id || null;
+    const status = subObj?.status || null;
+    const current_period_end = subObj?.current_period_end
+      ? new Date(subObj.current_period_end * 1000).toISOString()
+      : null;
+
     const isPro = status === "active" || status === "trialing";
-    await sb.from("profiles").upsert({
-      id: user.id,
-      stripe_customer_id: customerId || null,
-      stripe_subscription_id: subId || null,
+
+    // 2) If we can't map to a Supabase user, we still return success
+    // (webhook will handle it later), but we can't upsert.
+    if (!supabaseUserId) {
+      return NextResponse.json({ ok: true, premium: isPro, mapped: false });
+    }
+
+    // 3) Upsert the profile using service role (server only)
+    const sbAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+
+    await sbAdmin.from("profiles").upsert({
+      id: supabaseUserId,
+      stripe_customer_id: customerId,
+      stripe_subscription_id: subId,
       subscription_status: status,
       is_premium: isPro,
       current_period_end,
-      plan: sess.mode === "subscription" ? (sess?.metadata?.plan || null) : null
+      plan: sess?.metadata?.plan || null,
     });
 
-    return NextResponse.json({ ok: true, premium: isPro });
+    return NextResponse.json({ ok: true, premium: isPro, mapped: true });
   } catch (e) {
     console.error("confirm-subscription error:", e);
     return NextResponse.json({ error: "confirm_failed" }, { status: 500 });
