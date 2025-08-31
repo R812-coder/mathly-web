@@ -22,7 +22,27 @@ export default function SuccessPage() {
     if (qp === "yearly" || qp === "monthly") setPlan(qp);
     if (p.get("session_id")) setJustPaid(true); // ← we came back from Stripe
   }, []);
-
+// Immediately confirm on return from Stripe (idempotent, succeeds even if webhook is slow)
+useEffect(() => {
+    (async () => {
+      if (!justPaid) return;
+      const p = new URLSearchParams(window.location.search);
+      const sid = p.get("session_id");
+      if (!sid) return;
+  
+      const { data: { session } = {} } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+  
+      try {
+        await fetch(`/api/confirm-subscription?session_id=${encodeURIComponent(sid)}`, {
+          headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+        // The polling effect that already exists will flip the UI to "Manage subscription"
+        // as soon as the profile row is updated.
+      } catch {}
+    })();
+  }, [justPaid]);
+  
   const chosenPrice = useMemo(
     () => (plan === "yearly" ? PRICE_Y : PRICE_M),
     [plan]
