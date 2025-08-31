@@ -37,12 +37,12 @@ export default function CheckoutClient() {
     const { data: { session } = {} } = await supabase.auth.getSession();
 
     const here = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    const next = encodeURIComponent(here);
-
-    if (!session?.access_token) {
-      window.location.href = `/login?next=${next}`;
-      return;
-    }
+     if (!session?.access_token) {
+       const loginUrl = new URL('/login', window.location.origin);
+       loginUrl.searchParams.set('next', here); // let URL do the encoding ONCE
+       window.location.href = loginUrl.toString();
+       return;
+     }
 
     try {
       const r = await fetch(`/api/create-checkout-session`, {

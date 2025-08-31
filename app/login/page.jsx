@@ -20,17 +20,21 @@ export default function LoginPage() {
 
   async function onGoogle() {
     const origin = window.location.origin;
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${origin}/auth/callback?next=${encodeURIComponent(nextPath)}` },
-    });
+    const cb = new URL("/auth/callback", origin);
+     cb.searchParams.set("next", next); // DO NOT encode again
+     await supabase.auth.signInWithOAuth({
+       provider: "google",
+       options: { redirectTo: cb.toString() },
+     });
   }
 
   async function onSubmit(e) {
     e.preventDefault();
     setBusy(true);
     const origin = window.location.origin;
-    const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(nextPath)}`;
+    const cb = new URL("/auth/callback", origin);
+ cb.searchParams.set("next", next);
+ const redirectTo = cb.toString();
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: { emailRedirectTo: redirectTo, shouldCreateUser: true },
