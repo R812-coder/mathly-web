@@ -1,9 +1,8 @@
 "use client";
+export const dynamic = "force-dynamic";
 
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { supabase } from "../../../lib/supabaseClient";
-
-export const dynamic = "force-dynamic";
 
 const PRICE_M = process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY;
 const PRICE_Y = process.env.NEXT_PUBLIC_STRIPE_PRICE_YEARLY;
@@ -23,6 +22,7 @@ export default function SuccessPage() {
     if (p.get("session_id")) setJustPaid(true); // ← we came back from Stripe
   }, []);
 
+  const [loginHref, setLoginHref] = useState("/login");
   // Call confirm API once when we return from Stripe (idempotent, no auth needed)
 useEffect(() => {
     const p = new URLSearchParams(window.location.search);
@@ -212,7 +212,7 @@ useEffect(() => {
 
         {/* If header still shows "Log in", give them a finish-sign-in hint */}
 <p className="mt-3 text-sm text-gray-500">
-  Already paid? <a className="underline" href={`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`}>Log in</a> to activate on this device.
+  Already paid? <a className="underline" href={loginHref}>Log in</a>
 </p>
 
       </section>
