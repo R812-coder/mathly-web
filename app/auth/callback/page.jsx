@@ -1,32 +1,22 @@
 "use client";
-
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { supabase } from "../../../lib/supabaseClient";
+import { useEffect } from "react";
+import { supabase } from "../../lib/supabaseClient";
 
 export default function AuthCallback() {
-  const [status, setStatus] = useState("Finishing login…");
-  const router = useRouter();
-
   useEffect(() => {
     (async () => {
       try {
-        const params = new URLSearchParams(window.location.search);
-        const code = params.get("code");
-        const next = params.get("next") || "/";
+        const url = new URL(window.location.href);
+        const next = url.searchParams.get("next") || "/";
+        // Handle OAuth (code param) and magic-link (hash) flows
+        const code = url.searchParams.get("code");
         if (code) await supabase.auth.exchangeCodeForSession({ code });
-        setStatus("Login complete. Redirecting…");
-        router.replace(next);
-      } catch (e) {
-        console.error(e);
-        setStatus("Login failed. Try again from the Login page.");
+        else await supabase.auth.getSession(); // will parse hash if present
+        window.location.replace(`${next}${next.includes("?") ? "&" : "?"}signed_in=1`);
+      } catch {
+        window.location.replace("/login?error=auth");
       }
     })();
-  }, [router]);
-
-  return (
-    <main className="container-nice py-16">
-      <p>{status}</p>
-    </main>
-  );
+  }, []);
+  return null;
 }

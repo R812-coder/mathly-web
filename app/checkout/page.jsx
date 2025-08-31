@@ -1,8 +1,8 @@
 "use client";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 
-const API     = ""; // use same-origin calls
+const API = "/api"; // same-origin; no CORS
 const PRICE_M = process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY;
 const PRICE_Y = process.env.NEXT_PUBLIC_STRIPE_PRICE_YEARLY;
 
@@ -10,7 +10,25 @@ export default function UpgradePage() {
   const [plan, setPlan] = useState("monthly");
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isPro, setIsPro] = useState(false);
+  const [toast, setToast] = useState("");
+
   const priceId = useMemo(() => (plan === "yearly" ? PRICE_Y : PRICE_M), [plan]);
+
+
+  // show "signed in" toast and read entitlement
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("signed_in") === "1") setToast("Signed in ✓");
+    (async () => {
+     const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) { setIsPro(false); return; }
+      try {
+        const r = await fetch(`${API}/entitlement`, { headers: { Authorization: `Bearer ${session.access_token}` }});
+        const j = await r.json(); setIsPro(!!j?.premium);
+     } catch {}
+    })();
+  }, []);
 
   const startCheckout = useCallback(async () => {
     setMsg("");
@@ -20,7 +38,8 @@ export default function UpgradePage() {
 
     // Not logged in → send to Google login, then bounce back here to checkout
     if (!session?.access_token) {
-      window.location.href = `/login?next=checkout&plan=${plan}`;
+        const next = `/checkout?plan=${plan}`;
+        window.location.href = `/login?next=${encodeURIComponent(next)}`;
       return;
     }
 
@@ -56,13 +75,23 @@ export default function UpgradePage() {
           <ul className="mt-4 space-y-2 text-sm text-gray-600">
             <li>• Unlimited answers</li><li>• Better accuracy</li><li>• Priority solving speed</li>
           </ul>
-          <button
+          {!isPro && <button
             onClick={()=>{ setPlan("monthly"); startCheckout(); }}
             disabled={loading}
             className="mt-6 inline-flex items-center justify-center rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white shadow-soft hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {loading && plan==="monthly" ? "Loading…" : "Go to Checkout"}
-          </button>
+            </button>}
+          {isPro && (
+            <button
+              onClick={() => window.location.href = "/checkout/success?plan=monthly"}
+              className="mt-6 inline-flex items-center justify-center rounded-xl border px-6 py-3 font-semibold hover:bg-black/5"
+            >
+              Manage subscription
+            </button>
+          )}
+          {toast && <p className="mt-3 text-sm text-green-700">{toast}</p>}
+
         </div>
 
         {/* Yearly */}

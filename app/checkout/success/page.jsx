@@ -2,7 +2,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { supabase } from "../../../lib/supabaseClient";
 
-const API = ""; // same-origin
+const API = "/api"; // same-origin
 const PRICE_M = process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY;
 const PRICE_Y = process.env.NEXT_PUBLIC_STRIPE_PRICE_YEARLY;
 
@@ -143,23 +143,23 @@ export default function SuccessPage() {
       </div>
 
       <div className="mt-6 flex flex-wrap gap-3">
-        <button
+      {!isPro && <button
           onClick={goToCheckout}
           disabled={loading}
           className="rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white shadow-soft hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {loading ? "Loading…" : "Go to Checkout"}
-        </button>
+        </button>}
 
-        <button
+        {isPro && <button
           onClick={openPortal}
           disabled={portalLoading}
           className="rounded-xl border px-6 py-3 font-semibold hover:bg-black/5 disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {portalLoading ? "Opening…" : "Manage subscription"}
-        </button>
+          </button>}
       </div>
-
+       
       {msg && <p className="mt-4 text-sm text-red-600">{msg}</p>}
 
       <section className="mt-10 rounded-2xl border p-6 text-sm text-gray-600 max-w-2xl">
