@@ -1,99 +1,53 @@
-// app/login/page.jsx
 "use client";
-export const dynamic = "force-dynamic"; // don't prerender this page
+export const dynamic = "force-dynamic";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../../lib/supabaseClient";
 
-
-
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [msg, setMsg] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState("login"); // "login" | "signup"
-  const [next, setNext] = useState("/");
+  const [email, setEmail]   = useState("");
+  const [busy, setBusy]     = useState(false);
+  const [msg, setMsg]       = useState("");
+  const [nextPath, setNext] = useState("/");
 
   useEffect(() => {
-    const p = new URLSearchParams(window.location.search);
-    setNext(p.get("next") || "/");
-    const mode = p.get("mode");
-    if (mode === "signup") setTab("signup");
+    const sp = new URLSearchParams(window.location.search);
+    // If someone sent /login?next=%2Fcheckout%3Fplan%3Dmonthly this yields "/checkout?plan=monthly"
+    const decoded = sp.get("next") ? decodeURIComponent(sp.get("next")) : "/";
+    setNext(decoded);
   }, []);
 
-  const callback = () =>
-    `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
-
   async function onGoogle() {
+    const origin = window.location.origin;
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: callback() },
+      options: { redirectTo: `${origin}/auth/callback?next=${encodeURIComponent(nextPath)}` },
     });
   }
 
   async function onSubmit(e) {
     e.preventDefault();
     setBusy(true);
-    setMsg(tab === "signup" ? "Sending sign-up link…" : "Sending login link…");
-
+    const origin = window.location.origin;
+    const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(nextPath)}`;
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: callback(), shouldCreateUser: true },
+      options: { emailRedirectTo: redirectTo, shouldCreateUser: true },
     });
-
     setBusy(false);
-    setMsg(
-      error ? `Error: ${error.message}` : "Check your email for the magic link!"
-    );
+    setMsg(error ? `Error: ${error.message}` : "Check your email for the magic link!");
   }
 
   return (
     <main className="container-nice py-16">
       <div className="max-w-lg">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          {tab === "signup" ? "Create your account" : "Log in"}
-        </h1>
-        <p className="mt-2 text-gray-600">
-          {tab === "signup"
-            ? "Use Google or your email to get started."
-            : "We’ll send you a one-click magic link."}
-        </p>
-      </div>
-
-      <div className="mt-6 flex gap-3 text-sm">
-        <button
-          onClick={() => {
-            setTab("login");
-            const u = new URL(window.location.href);
-            u.searchParams.delete("mode");
-            window.history.replaceState({}, "", u);
-          }}
-          className={`rounded-xl border px-3 py-1 ${
-            tab === "login" ? "bg-black/5" : ""
-          }`}
-        >
-          Log in
-        </button>
-        <button
-          onClick={() => {
-            setTab("signup");
-            const u = new URL(window.location.href);
-            u.searchParams.set("mode", "signup");
-            window.history.replaceState({}, "", u);
-          }}
-          className={`rounded-xl border px-3 py-1 ${
-            tab === "signup" ? "bg-black/5" : ""
-          }`}
-        >
-          Create account
-        </button>
+        <h1 className="text-3xl font-semibold tracking-tight">Log in</h1>
+        <p className="mt-2 text-gray-600">We’ll send you a one-click magic link.</p>
       </div>
 
       <div className="mt-8 max-w-lg rounded-2xl border bg-white p-6 shadow-soft">
-        <button
-          onClick={onGoogle}
-          className="w-full rounded-xl border px-4 py-3 font-semibold hover:bg-black/5"
-        >
+        <button onClick={onGoogle} className="w-full rounded-xl border px-4 py-3 font-semibold hover:bg-black/5">
           Continue with Google
         </button>
 
@@ -117,53 +71,16 @@ export default function LoginPage() {
             disabled={busy}
             className="w-full rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white shadow-soft hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {busy
-              ? "Sending…"
-              : tab === "signup"
-              ? "Send sign-up link"
-              : "Send login link"}
+            {busy ? "Sending…" : "Send magic link"}
           </button>
         </form>
 
         {msg && <p className="mt-3 text-sm text-gray-600">{msg}</p>}
 
-        <div className="mt-6 text-sm text-gray-600">
-          {tab === "signup" ? (
-            <>
-              Already have an account?{" "}
-              <button
-                onClick={() => {
-                  setTab("login");
-                  const u = new URL(window.location.href);
-                  u.searchParams.delete("mode");
-                  window.history.replaceState({}, "", u);
-                }}
-                className="underline"
-              >
-                Log in
-              </button>
-            </>
-          ) : (
-            <>
-              New here?{" "}
-              <button
-                onClick={() => {
-                  setTab("signup");
-                  const u = new URL(window.location.href);
-                  u.searchParams.set("mode", "signup");
-                  window.history.replaceState({}, "", u);
-                }}
-                className="underline"
-              >
-                Create an account
-              </button>
-            </>
-          )}
-        </div>
-
-        <div className="mt-4 text-sm">
-          <Link href="/" className="hover:text-gray-900">
-            ← Back home
+        <div className="mt-6 text-sm text-gray-600 flex justify-between">
+          <span>New here? Same buttons create an account.</span>
+          <Link href={`/login?next=${encodeURIComponent(nextPath)}`} className="hover:text-gray-900">
+            Already a member? Log in
           </Link>
         </div>
       </div>

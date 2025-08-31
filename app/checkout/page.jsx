@@ -3,7 +3,25 @@
 import { useCallback, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 
+useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get("signed_in") === "1") {
+      setMsg("You're signed in — pick a plan to continue.");
+      // Remove the flag from the URL so it doesn’t stick around
+      sp.delete("signed_in");
+      const u = new URL(window.location.href);
+      u.search = sp.toString();
+      window.history.replaceState({}, "", u.toString());
+    }
+  }, []);
 
+  const [plan, setPlan] = useState(() => {
+    if (typeof window === "undefined") return "monthly";
+    const sp = new URLSearchParams(window.location.search);
+    const p = sp.get("plan");
+    return p === "yearly" || p === "monthly" ? p : "monthly";
+  });
+  
 export const dynamic = "force-dynamic";
 
 const PRICE_M = process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY;
