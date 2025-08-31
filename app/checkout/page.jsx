@@ -1,19 +1,8 @@
 "use client";
-
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import { supabase } from "../../lib/supabaseClient";
 
-useEffect(() => {
-    const sp = new URLSearchParams(window.location.search);
-    if (sp.get("signed_in") === "1") {
-      setMsg("You're signed in — pick a plan to continue.");
-      // Remove the flag from the URL so it doesn’t stick around
-      sp.delete("signed_in");
-      const u = new URL(window.location.href);
-      u.search = sp.toString();
-      window.history.replaceState({}, "", u.toString());
-    }
-  }, []);
+
 
   const [plan, setPlan] = useState(() => {
     if (typeof window === "undefined") return "monthly";
@@ -27,6 +16,17 @@ export const dynamic = "force-dynamic";
 const PRICE_M = process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY;
 const PRICE_Y = process.env.NEXT_PUBLIC_STRIPE_PRICE_YEARLY;
 
+useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get("signed_in") === "1") {
+      setMsg("You're signed in — pick a plan to continue.");
+      // Remove the flag from the URL so it doesn’t stick around
+      sp.delete("signed_in");
+      const u = new URL(window.location.href);
+      u.search = sp.toString();
+      window.history.replaceState({}, "", u.toString());
+    }
+  }, []);
 export default function UpgradePage() {
   const [plan, setPlan] = useState("monthly");
   const [msg, setMsg] = useState("");
