@@ -1,8 +1,10 @@
 "use client";
+
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { supabase } from "../../../lib/supabaseClient";
 
-const API = "/api"; // same-origin
+export const dynamic = "force-dynamic";
+
 const PRICE_M = process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY;
 const PRICE_Y = process.env.NEXT_PUBLIC_STRIPE_PRICE_YEARLY;
 
@@ -12,31 +14,38 @@ export default function SuccessPage() {
   const [loading, setLoading] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
   const [plan, setPlan] = useState("monthly");
+  const [justPaid, setJustPaid] = useState(false); // ← key
 
-  // If someone hits /checkout/success?plan=yearly, honor it.
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
-    const qPlan = p.get("plan");
-    if (qPlan === "yearly" || qPlan === "monthly") setPlan(qPlan);
+    const qp = p.get("plan");
+    if (qp === "yearly" || qp === "monthly") setPlan(qp);
+    if (p.get("session_id")) setJustPaid(true); // ← we came back from Stripe
   }, []);
 
-  const chosenPrice = useMemo(() => (plan === "yearly" ? PRICE_Y : PRICE_M), [plan]);
+  const chosenPrice = useMemo(
+    () => (plan === "yearly" ? PRICE_Y : PRICE_M),
+    [plan]
+  );
 
-  // Centralized login bounce that preserves plan + any query/hash
   const redirectToLogin = useCallback(() => {
-    const next = encodeURIComponent(`${window.location.pathname}${window.location.search}${window.location.hash}`);
+    const next = encodeURIComponent(
+      `${window.location.pathname}${window.location.search}${window.location.hash}`
+    );
     window.location.href = `/login?next=${next}`;
   }, []);
 
   const goToCheckout = useCallback(async () => {
     setMsg("");
     setLoading(true);
-
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) { setLoading(false); redirectToLogin(); return; }
-
+    const { data: { session } = {} } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      setLoading(false);
+      redirectToLogin();
+      return;
+    }
     try {
-        const res = await fetch(`/api/create-checkout-session`, {
+      const r = await fetch(`/api/create-checkout-session`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -44,19 +53,9 @@ export default function SuccessPage() {
         },
         body: JSON.stringify({ priceId: chosenPrice }),
       });
-
-      if (res.status === 401) {
-        // Try to read a login_url if the backend provides one; otherwise bounce to /login
-        let j = {};
-        try { j = await res.json(); } catch {}
-        if (j?.login_url) window.location.href = j.login_url;
-        else redirectToLogin();
-        return;
-      }
-
-      const { url } = await res.json();
-      if (!url) throw new Error("No checkout url");
-      window.location.href = url;
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j?.url) throw new Error(j?.error || "No checkout url");
+      window.location.href = j.url;
     } catch (e) {
       console.error(e);
       setMsg("Load failed (network/CORS)");
@@ -68,12 +67,14 @@ export default function SuccessPage() {
   const openPortal = useCallback(async () => {
     setMsg("");
     setPortalLoading(true);
-
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) { setPortalLoading(false); redirectToLogin(); return; }
-
+    const { data: { session } = {} } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      setPortalLoading(false);
+      redirectToLogin();
+      return;
+    }
     try {
-        const r = await fetch(`/api/create-portal-session`, {
+      const r = await fetch(`/api/create-portal-session`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -90,36 +91,46 @@ export default function SuccessPage() {
       setPortalLoading(false);
     }
   }, [redirectToLogin]);
-  // Poll entitlement while we're on the success page
+
+  // 🔁 Poll entitlement every 2s regardless of initial login state (cap at ~90s)
   useEffect(() => {
-        let timer;
-        const poll = async () => {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (!session?.access_token) return; // user not logged in on web
-          try {
-            const r = await fetch(`/api/entitlement`, {
-              headers: { Authorization: `Bearer ${session.access_token}` },
-            });
-            const j = await r.json();
-            if (j?.premium) { setIsPro(true); setMsg(""); return; }
-          } catch {}
-          timer = setTimeout(poll, 2000); // try again in 2s
-        };
-        poll();
-        return () => clearTimeout(timer);
-      }, []);
+    let tries = 0;
+    const id = setInterval(async () => {
+      tries++;
+      const { data: { session } = {} } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        if (tries >= 45) clearInterval(id);
+        return;
+      }
+      try {
+        const r = await fetch(`/api/entitlement`, {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        const j = await r.json().catch(() => ({}));
+        if (j?.premium) {
+          setIsPro(true);
+          setMsg("");
+          clearInterval(id);
+        }
+      } catch {}
+      if (tries >= 45) clearInterval(id);
+    }, 2000);
+    return () => clearInterval(id);
+  }, []);
 
   return (
     <main className="container-nice py-16">
       <div className="max-w-2xl">
         <h1 className="text-3xl font-semibold tracking-tight">Upgrade to Pro</h1>
-        <p className="mt-2 text-gray-600">Unlimited solves • Priority speed • Step-by-step tutor mode</p>
+        <p className="mt-2 text-gray-600">
+          Unlimited solves • Priority speed • Step-by-step tutor mode
+        </p>
       </div>
 
-      {/* Optional: simple plan toggle */}
+      {/* Plan toggle (optional) */}
       <div className="mt-4 flex gap-3 text-sm">
         <button
-          className={`rounded-xl border px-3 py-1 ${plan==='monthly' ? 'bg-black/5' : ''}`}
+          className={`rounded-xl border px-3 py-1 ${plan === "monthly" ? "bg-black/5" : ""}`}
           onClick={() => {
             setPlan("monthly");
             const u = new URL(window.location.href);
@@ -130,7 +141,7 @@ export default function SuccessPage() {
           Monthly
         </button>
         <button
-          className={`rounded-xl border px-3 py-1 ${plan==='yearly' ? 'bg-black/5' : ''}`}
+          className={`rounded-xl border px-3 py-1 ${plan === "yearly" ? "bg-black/5" : ""}`}
           onClick={() => {
             setPlan("yearly");
             const u = new URL(window.location.href);
@@ -143,29 +154,43 @@ export default function SuccessPage() {
       </div>
 
       <div className="mt-6 flex flex-wrap gap-3">
-      {!isPro && <button
-          onClick={goToCheckout}
-          disabled={loading}
-          className="rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white shadow-soft hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          {loading ? "Loading…" : "Go to Checkout"}
-        </button>}
+        {/* If we just returned from Stripe, show a wait message (hide the checkout button) */}
+        {justPaid && !isPro && (
+          <div className="rounded-xl border px-4 py-3 text-sm text-gray-600">
+            Thanks! We’re confirming your payment… this can take a moment.
+          </div>
+        )}
 
-        {isPro && <button
-          onClick={openPortal}
-          disabled={portalLoading}
-          className="rounded-xl border px-6 py-3 font-semibold hover:bg-black/5 disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          {portalLoading ? "Opening…" : "Manage subscription"}
-          </button>}
+        {/* Only show Go to Checkout if user didn’t just pay and isn’t Pro yet */}
+        {!justPaid && !isPro && (
+          <button
+            onClick={goToCheckout}
+            disabled={loading}
+            className="rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white shadow-soft hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {loading ? "Loading…" : "Go to Checkout"}
+          </button>
+        )}
+
+        {/* Show portal button as soon as entitlement flips */}
+        {isPro && (
+          <button
+            onClick={openPortal}
+            disabled={portalLoading}
+            className="rounded-xl border px-6 py-3 font-semibold hover:bg-black/5 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {portalLoading ? "Opening…" : "Manage subscription"}
+          </button>
+        )}
       </div>
-       
+
       {msg && <p className="mt-4 text-sm text-red-600">{msg}</p>}
 
-      <section className="mt-10 rounded-2xl border p-6 text-sm text-gray-600 max-w-2xl">
+      <section className="mt-10 max-w-2xl rounded-2xl border p-6 text-sm text-gray-600">
         <div className="font-medium text-gray-900">Tip</div>
         <p className="mt-2">
-          If you don’t see your subscription right away, give it a minute after checkout. Stripe can take a moment to notify our backend.
+          If you don’t see your subscription right away, give it a minute after checkout.
+          Stripe can take a moment to notify our backend.
         </p>
       </section>
     </main>
