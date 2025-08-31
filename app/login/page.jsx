@@ -1,11 +1,11 @@
 // app/login/page.jsx
 "use client";
-
+export const dynamic = "force-dynamic"; // don't prerender this page
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../../lib/supabaseClient";
 
-export const dynamic = "force-dynamic"; // don't prerender this page
+
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
