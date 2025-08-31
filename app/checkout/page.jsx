@@ -2,7 +2,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 
-const API     = process.env.NEXT_PUBLIC_BACKEND_URL;
+const API     = ""; // use same-origin calls
 const PRICE_M = process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY;
 const PRICE_Y = process.env.NEXT_PUBLIC_STRIPE_PRICE_YEARLY;
 
@@ -25,7 +25,7 @@ export default function UpgradePage() {
     }
 
     try {
-      const r = await fetch(`${API}/create-checkout-session`, {
+      const r = await fetch(`/api/create-checkout-session`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({ priceId }),

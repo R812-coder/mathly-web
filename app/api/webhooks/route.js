@@ -1,12 +1,14 @@
 // app/api/webhooks/route.js
+export const runtime = "nodejs";
+
 import Stripe from "stripe";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-export const runtime = "nodejs";
+
 
 // Raw body for signature verification
-export const config = { api: { bodyParser: false } };
+// (remove the config export)
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const whSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -27,8 +29,8 @@ export async function POST(req) {
   let event;
   try {
     const sig = req.headers.get("stripe-signature");
-    const raw = await readRawBody(req);
-    event = stripe.webhooks.constructEvent(raw, sig, whSecret);
+    const raw = await req.text(); // App Router
+   event = stripe.webhooks.constructEvent(raw, sig, whSecret);
   } catch (err) {
     console.error("Webhook signature verification failed.", err.message);
     return new NextResponse("Bad signature", { status: 400 });

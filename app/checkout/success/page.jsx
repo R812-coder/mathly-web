@@ -2,7 +2,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { supabase } from "../../../lib/supabaseClient";
 
-const API = process.env.NEXT_PUBLIC_BACKEND_URL;
+const API = ""; // same-origin
 const PRICE_M = process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY;
 const PRICE_Y = process.env.NEXT_PUBLIC_STRIPE_PRICE_YEARLY;
 
@@ -36,7 +36,7 @@ export default function SuccessPage() {
     if (!session?.access_token) { setLoading(false); redirectToLogin(); return; }
 
     try {
-        const res = await fetch(`${API}/create-checkout-session`, {
+        const res = await fetch(`/api/create-checkout-session`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -73,7 +73,7 @@ export default function SuccessPage() {
     if (!session?.access_token) { setPortalLoading(false); redirectToLogin(); return; }
 
     try {
-        const r = await fetch(`${API}/create-portal-session`, {
+        const r = await fetch(`/api/create-portal-session`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -97,7 +97,7 @@ export default function SuccessPage() {
           const { data: { session } } = await supabase.auth.getSession();
           if (!session?.access_token) return; // user not logged in on web
           try {
-            const r = await fetch(`${API}/entitlement`, {
+            const r = await fetch(`/api/entitlement`, {
               headers: { Authorization: `Bearer ${session.access_token}` },
             });
             const j = await r.json();
