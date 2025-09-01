@@ -13,17 +13,6 @@ import { createClient } from "@supabase/supabase-js";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const whSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-async function readRawBody(request) {
-  const chunks = [];
-  const reader = request.body.getReader();
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-  }
-  return Buffer.concat(chunks);
-}
 
 export async function POST(req) {
   let event;
@@ -72,29 +61,44 @@ export async function POST(req) {
       });
     }
 
-    if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted" || event.type === "customer.subscription.created") {
-      const sub = event.data.object;
-      const customerId = sub.customer;
-      const status = sub.status;
-      const current_period_end = new Date(sub.current_period_end * 1000).toISOString();
+    // app/api/webhooks/route.js  (inside POST() after you init sbAdmin, stripe, etc.)
 
-      // find profile by customer id
-      const { data: rows } = await sbAdmin
-        .from("profiles")
-        .select("id")
-        .eq("stripe_customer_id", customerId)
-        .limit(1);
-
-      if (rows?.[0]?.id) {
-        await sbAdmin.from("profiles").upsert({
-          id: rows[0].id,
-          stripe_subscription_id: sub.id,
-          subscription_status: status,
-          is_premium: status === "active" || status === "trialing",
-          current_period_end
-        });
-      }
+if (
+    event.type === "customer.subscription.updated" ||
+    event.type === "customer.subscription.deleted" ||
+    event.type === "customer.subscription.created"
+  ) {
+    const sub = event.data.object;
+    const customerId = sub.customer;
+    const status = sub.status; // 'active' | 'trialing' | 'past_due' | 'canceled' | 'unpaid' | ...
+    const current_period_end = new Date(sub.current_period_end * 1000).toISOString();
+  
+    // find profile by customer id
+    const { data: rows, error: findErr } = await sbAdmin
+      .from("profiles")
+      .select("id")
+      .eq("stripe_customer_id", customerId)
+      .limit(1);
+  
+    if (findErr) {
+      console.error("profiles lookup failed:", findErr);
     }
+  
+    if (rows?.[0]?.id) {
+      const premiumNow = status === "active" || status === "trialing";
+  
+      const { error: upErr } = await sbAdmin.from("profiles").upsert({
+        id: rows[0].id,
+        stripe_subscription_id: sub.id,
+        subscription_status: status,
+        is_premium: premiumNow,                 // ← always set based on status
+        current_period_end
+      });
+  
+      if (upErr) console.error("profiles upsert failed:", upErr);
+    }
+  }
+  
 
     return NextResponse.json({ received: true });
   } catch (e) {
