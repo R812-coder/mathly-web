@@ -1,43 +1,142 @@
-import { NextResponse } from "next/server";
-import Stripe from "stripe";
-import { createClient } from "@supabase/supabase-js";
+// app/api/confirm-subscription/route.js
+import { createClient } from '@supabase/supabase-js';
+import Stripe from 'stripe';
+import { preflight, withCors } from '../_cors';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+// Initialize Supabase client only when environment variables are available
+const getSupabaseClient = () => {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error('Missing Supabase environment variables');
+  }
+  
+  return createClient(supabaseUrl, serviceRoleKey);
+};
+
+// Initialize Stripe client only when environment variables are available
+const getStripeClient = () => {
+  const stripeKey = process.env.STRIPE_SECRET_KEY;
+  
+  if (!stripeKey) {
+    throw new Error('Missing Stripe environment variables');
+  }
+  
+  return new Stripe(stripeKey);
+};
 
 export async function GET(req) {
+  const pre = preflight(req);
+  if (pre) return pre;
+
   try {
-    const sid = new URL(req.url).searchParams.get("session_id");
-    if (!sid) return NextResponse.json({ ok: false });
+    const { searchParams } = new URL(req.url);
+    const sessionId = searchParams.get('session_id');
 
-    const session = await stripe.checkout.sessions.retrieve(sid, { expand: ["subscription"] });
-    const userId = session?.client_reference_id;
-    const customerId = session?.customer;
-    const sub = session?.subscription;
-    const status = (typeof sub === "object" ? sub?.status : null) || "active";
-    const current_period_end = (typeof sub === "object" && sub?.current_period_end)
-      ? new Date(sub.current_period_end * 1000).toISOString()
-      : null;
+    if (!sessionId) {
+      return withCors(req, new Response(
+        JSON.stringify({ error: 'Missing session_id parameter' }),
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      ));
+    }
 
-    if (!userId || !customerId) return NextResponse.json({ ok: true });
+    // Initialize clients
+    const stripe = getStripeClient();
+    const supabase = getSupabaseClient();
 
-    const sb = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
+    // Retrieve the checkout session
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    
+    if (!session) {
+      return withCors(req, new Response(
+        JSON.stringify({ error: 'Invalid session ID' }),
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      ));
+    }
 
-    await sb.from("profiles").upsert({
-      id: userId,
-      stripe_customer_id: customerId,
-      stripe_subscription_id: typeof sub === "object" ? sub.id : (typeof sub === "string" ? sub : null),
-      subscription_status: status,
-      is_premium: status === "active" || status === "trialing",
-      current_period_end,
-      plan: session?.mode || null
-    });
+    // Get subscription details
+    const subscription = await stripe.subscriptions.retrieve(session.subscription);
+    const customer = await stripe.customers.retrieve(session.customer);
 
-    return NextResponse.json({ ok: true });
-  } catch (e) {
-    console.error("confirm-subscription error:", e);
-    return NextResponse.json({ ok: false });
+    // Find user by Stripe customer ID
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('stripe_customer_id', session.customer)
+      .single();
+
+    if (!profile) {
+      return withCors(req, new Response(
+        JSON.stringify({ error: 'User profile not found' }),
+        {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      ));
+    }
+
+    // Determine if user is premium based on subscription status
+    const isPremium = ['active', 'trialing'].includes(subscription.status);
+    
+    // Get plan name from subscription
+    const plan = subscription.items.data[0]?.price.recurring?.interval || null;
+    
+    // Calculate current period end
+    const currentPeriodEnd = new Date(subscription.current_period_end * 1000).toISOString();
+    
+    // Update profile immediately (idempotent)
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .upsert({
+        id: profile.id,
+        is_premium: isPremium,
+        subscription_status: subscription.status,
+        current_period_end: currentPeriodEnd,
+        plan: plan,
+        stripe_customer_id: customer.id,
+        stripe_subscription_id: subscription.id,
+      });
+
+    if (updateError) {
+      console.error('Error updating profile:', updateError);
+      return withCors(req, new Response(
+        JSON.stringify({ error: 'Failed to update profile' }),
+        {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      ));
+    }
+
+    return withCors(req, new Response(
+      JSON.stringify({
+        success: true,
+        premium: isPremium,
+        status: subscription.status,
+        plan: plan,
+        periodEnd: currentPeriodEnd,
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    ));
+
+  } catch (error) {
+    console.error('Confirm subscription error:', error);
+    return withCors(req, new Response(
+      JSON.stringify({ error: 'Failed to confirm subscription' }),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    ));
   }
 }

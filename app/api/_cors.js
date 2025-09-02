@@ -1,18 +1,58 @@
 // app/api/_cors.js
-export function withCORS(res, request) {
-    const origin = request.headers.get('origin') || '*';
-  
-    // If you know your extension ID, you can lock this down:
-    // const allowed = [`chrome-extension://<YOUR_EXTENSION_ID>`, process.env.NEXT_PUBLIC_SITE_URL];
-    // const allowOrigin = allowed.includes(origin) ? origin : process.env.NEXT_PUBLIC_SITE_URL;
-  
-    const allowOrigin = origin === 'null' ? '*' : origin; // fallback when called from SW
-  
-    res.headers.set('Access-Control-Allow-Origin', allowOrigin);
-    res.headers.set('Vary', 'Origin');
-    res.headers.set('Access-Control-Allow-Credentials', 'true');
-    res.headers.set('Access-Control-Allow-Headers', 'authorization,content-type');
-    res.headers.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-    return res;
+
+const ALLOWED = [
+  process.env.NEXT_PUBLIC_SITE_URL,   // e.g. https://getmathly.com
+  process.env.NEXT_PUBLIC_WEB_URL,    // optional secondary domain
+].filter(Boolean);
+
+function pickOrigin(req) {
+  const origin = req.headers.get('origin') || '';
+  if (!origin) return '*';
+
+  // Allow our own web origins
+  if (ALLOWED.includes(origin)) return origin;
+
+  // Allow the browser extension origin(s)
+  if (origin.startsWith('chrome-extension://')) return origin;
+
+  // Otherwise, no credentials and wildcard
+  return '*';
+}
+
+export function corsHeaders(req) {
+  const origin = pickOrigin(req);
+  const headers = {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '600',
+    'Vary': 'Origin',
+  };
+  if (origin !== '*') {
+    headers['Access-Control-Allow-Credentials'] = 'true';
   }
+  return headers;
+}
+
+export function preflight(req) {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders(req) });
+  }
+  return null;
+}
+
+/**
+ * Convenience: wrap a Response/NextResponse with CORS headers.
+ * Usage:
+ *   const pre = preflight(req); if (pre) return pre;
+ *   return withCors(req, NextResponse.json(data));
+ */
+export function withCors(req, res) {
+  const headers = corsHeaders(req);
+  // Merge headers onto the response
+  for (const [k, v] of Object.entries(headers)) {
+    try { res.headers.set(k, v); } catch { /* NextResponse vs Response */ }
+  }
+  return res;
+}
   

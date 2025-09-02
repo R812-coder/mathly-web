@@ -1,58 +1,113 @@
 // app/api/entitlement/route.js
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from '@supabase/supabase-js';
+import { preflight, withCors } from '../_cors';
 
-const ALLOWED_ORIGINS = [
-  process.env.NEXT_PUBLIC_SITE_URL,              // your webapp origin
-  `chrome-extension://${process.env.NEXT_PUBLIC_EXT_ID}`, // your extension id (set this env var)
-].filter(Boolean);
-
-function corsHeaders(origin) {
-  const allowOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0] || "*";
-  return {
-    "Access-Control-Allow-Origin": allowOrigin,
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Authorization, Content-Type",
-    "Access-Control-Allow-Credentials": "true",
-    "Vary": "Origin",
-  };
-}
-
-export async function OPTIONS(req) {
-  const origin = req.headers.get("origin") || "";
-  return new NextResponse(null, { status: 204, headers: corsHeaders(origin) });
-}
+// Initialize Supabase client only when environment variables are available
+const getSupabaseClient = () => {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error('Missing Supabase environment variables');
+  }
+  
+  return createClient(supabaseUrl, serviceRoleKey);
+};
 
 export async function GET(req) {
-  const origin = req.headers.get("origin") || "";
+  const pre = preflight(req);
+  if (pre) return pre;
+
   try {
-    const auth = req.headers.get("authorization") || "";
-    const token = auth.replace("Bearer ", "");
-    if (!token) {
-      return NextResponse.json({ premium: false }, { status: 200, headers: corsHeaders(origin) });
+    // Get authorization header
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return withCors(req, new Response(
+        JSON.stringify({ error: 'Missing or invalid authorization header' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      ));
     }
 
-    const sb = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-      { global: { headers: { Authorization: `Bearer ${token}` } } }
-    );
-    const { data: { user } } = await sb.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ premium: false }, { status: 200, headers: corsHeaders(origin) });
+    const token = authHeader.replace('Bearer ', '');
+    
+    // Initialize Supabase client
+    const supabase = getSupabaseClient();
+    
+    // Verify the JWT token
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    if (authError || !user) {
+      return withCors(req, new Response(
+        JSON.stringify({ error: 'Invalid or expired token' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      ));
     }
 
-    const { data: profile } = await sb.from("profiles")
-      .select("is_premium, subscription_status, current_period_end, plan, stripe_customer_id")
-      .eq("id", user.id).maybeSingle();
+    // Get user profile with subscription data
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('is_premium, subscription_status, current_period_end, plan, stripe_customer_id')
+      .eq('id', user.id)
+      .single();
 
-    return NextResponse.json({
-      premium: !!profile?.is_premium,
-      status: profile?.subscription_status || null,
-      plan: profile?.plan || null,
-      customer: !!profile?.stripe_customer_id
-    }, { headers: corsHeaders(origin) });
-  } catch {
-    return NextResponse.json({ premium: false }, { headers: corsHeaders(origin) });
+    if (profileError && profileError.code !== 'PGRST116') {
+      // PGRST116 is "not found" - we'll create a default profile
+      console.error('Error fetching profile:', profileError);
+    }
+
+    // If no profile exists, create one with default values
+    if (!profile) {
+      const { data: newProfile, error: createError } = await supabase
+        .from('profiles')
+        .insert({
+          id: user.id,
+          email: user.email,
+          is_premium: false,
+          subscription_status: null,
+          current_period_end: null,
+          plan: null,
+          stripe_customer_id: null,
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        console.error('Error creating profile:', createError);
+        return withCors(req, new Response(
+          JSON.stringify({ error: 'Failed to create user profile' }),
+          { status: 500, headers: { 'Content-Type': 'application/json' } }
+        ));
+      }
+      
+      return withCors(req, new Response(
+        JSON.stringify({
+          premium: false,
+          status: null,
+          plan: null,
+          customer: null,
+          periodEnd: null,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      ));
+    }
+
+    // Return profile data
+    return withCors(req, new Response(
+      JSON.stringify({
+        premium: profile.is_premium || false,
+        status: profile.subscription_status,
+        plan: profile.plan,
+        customer: profile.stripe_customer_id,
+        periodEnd: profile.current_period_end,
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    ));
+
+  } catch (error) {
+    console.error('Entitlement endpoint error:', error);
+    return withCors(req, new Response(
+      JSON.stringify({ error: 'Internal server error' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    ));
   }
 }

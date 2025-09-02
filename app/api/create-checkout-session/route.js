@@ -1,64 +1,131 @@
 // app/api/create-checkout-session/route.js
-import Stripe from "stripe";
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from '@supabase/supabase-js';
+import Stripe from 'stripe';
+import { preflight, withCors } from '../_cors';
 
-export const runtime = "nodejs";
+// Initialize Supabase client only when environment variables are available
+const getSupabaseClient = () => {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error('Missing Supabase environment variables');
+  }
+  
+  return createClient(supabaseUrl, serviceRoleKey);
+};
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+// Initialize Stripe client only when environment variables are available
+const getStripeClient = () => {
+  const stripeKey = process.env.STRIPE_SECRET_KEY;
+  
+  if (!stripeKey) {
+    throw new Error('Missing Stripe environment variables');
+  }
+  
+  return new Stripe(stripeKey);
+};
 
 export async function POST(req) {
+  const pre = preflight(req);
+  if (pre) return pre;
+
   try {
-    // 1) Auth: read Supabase access token from Authorization header
-    const auth = req.headers.get("authorization") || "";
-    const token = auth.replace("Bearer ", "");
-    if (!token) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-
-    // 2) Get currently logged-in user from Supabase using their token
-    const sb = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-      { global: { headers: { Authorization: `Bearer ${token}` } } }
-    );
-    const { data: { user }, error: userErr } = await sb.auth.getUser();
-    if (userErr || !user) return NextResponse.json({ error: "no_user" }, { status: 401 });
-
-    const { priceId } = await req.json();
-
-    // 3) Ensure we have / create a Stripe customer tied to this user
-    const { data: profile } = await sb
-      .from("profiles")
-      .select("stripe_customer_id")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    let customerId = profile?.stripe_customer_id || null;
-
-    if (!customerId) {
-      const customer = await stripe.customers.create({
-        email: user.email || undefined,
-        metadata: { supabase_user_id: user.id }
-      });
-      customerId = customer.id;
-      await sb.from("profiles").upsert({ id: user.id, stripe_customer_id: customerId });
+    // Get authorization header
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return withCors(req, new Response(
+        JSON.stringify({ error: 'Missing or invalid authorization header' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      ));
     }
 
-    // 4) Create Checkout Session
-    const site = process.env.NEXT_PUBLIC_SITE_URL || (await req.headers.get("origin"));
+    const token = authHeader.replace('Bearer ', '');
+    
+    // Initialize clients
+    const supabase = getSupabaseClient();
+    const stripe = getStripeClient();
+    
+    // Verify the JWT token
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    if (authError || !user) {
+      return withCors(req, new Response(
+        JSON.stringify({ error: 'Invalid or expired token' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      ));
+    }
+
+    // Parse request body
+    const { priceId, plan } = await req.json();
+    
+    if (!priceId || !plan) {
+      return withCors(req, new Response(
+        JSON.stringify({ error: 'Missing priceId or plan' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      ));
+    }
+
+    // Get or create user profile
+    let { data: profile } = await supabase
+      .from('profiles')
+      .select('stripe_customer_id')
+      .eq('id', user.id)
+      .single();
+
+    let customerId = profile?.stripe_customer_id;
+
+    // If no Stripe customer exists, create one
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: user.email,
+        metadata: {
+          supabase_user_id: user.id,
+        },
+      });
+
+      customerId = customer.id;
+
+      // Update profile with Stripe customer ID
+      await supabase
+        .from('profiles')
+        .upsert({
+          id: user.id,
+          email: user.email,
+          stripe_customer_id: customerId,
+        });
+    }
+
+    // Create checkout session
     const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
       customer: customerId,
-      client_reference_id: user.id, // helps in webhook
-      line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${site}/checkout/success?plan=${priceId.includes("year") ? "yearly" : "monthly"}&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${site}/checkout/cancelled`,
-      allow_promotion_codes: true
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
+        },
+      ],
+      mode: 'subscription',
+      success_url: `${process.env.NEXT_PUBLIC_SITE_URL}/checkout/success?plan=${plan}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL}/checkout/cancelled`,
+      metadata: {
+        supabase_user_id: user.id,
+        plan: plan,
+      },
     });
 
-    return NextResponse.json({ url: session.url });
-  } catch (e) {
-    console.error("create-checkout-session error:", e);
-    return NextResponse.json({ error: "create_session_failed" }, { status: 500 });
+    return withCors(req, new Response(
+      JSON.stringify({ url: session.url }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    ));
+
+  } catch (error) {
+    console.error('Create checkout session error:', error);
+    return withCors(req, new Response(
+      JSON.stringify({ error: 'Failed to create checkout session' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    ));
   }
 }
 

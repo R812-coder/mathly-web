@@ -1,108 +1,171 @@
 // app/api/webhooks/route.js
 export const runtime = "nodejs";
 
-import Stripe from "stripe";
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from '@supabase/supabase-js';
+import Stripe from 'stripe';
+import { headers } from 'next/headers';
+import { preflight, withCors } from '../_cors';
 
+// Initialize Supabase client only when environment variables are available
+const getSupabaseClient = () => {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error('Missing Supabase environment variables');
+  }
+  
+  return createClient(supabaseUrl, serviceRoleKey);
+};
 
-
-// Raw body for signature verification
-// (remove the config export)
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-const whSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
+// Initialize Stripe client only when environment variables are available
+const getStripeClient = () => {
+  const stripeKey = process.env.STRIPE_SECRET_KEY;
+  
+  if (!stripeKey) {
+    throw new Error('Missing Stripe environment variables');
+  }
+  
+  return new Stripe(stripeKey);
+};
 
 export async function POST(req) {
-  let event;
-  try {
-    const sig = req.headers.get("stripe-signature");
-    const raw = await req.text(); // App Router
-   event = stripe.webhooks.constructEvent(raw, sig, whSecret);
-  } catch (err) {
-    console.error("Webhook signature verification failed.", err.message);
-    return new NextResponse("Bad signature", { status: 400 });
-  }
+  const pre = preflight(req);
+  if (pre) return pre;
 
   try {
-    const sbAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
+    const body = await req.text();
+    const signature = headers().get('stripe-signature');
 
-    if (event.type === "checkout.session.completed") {
-      const s = event.data.object;
-      // identify the user
-      const supabaseUserId = s.client_reference_id;
-      const customerId = s.customer;
-      let subId = null;
-      if (!subId && s.subscription) subId = typeof s.subscription === "string" ? s.subscription : s.subscription?.id;
-
-      const plan = s.display_items?.[0]?.plan?.interval ?? undefined;
-
-      // fetch subscription for status/period end
-      let status = "active";
-      let current_period_end = null;
-      if (subId) {
-        const sub = await stripe.subscriptions.retrieve(subId);
-        status = sub.status;
-        current_period_end = new Date(sub.current_period_end * 1000).toISOString();
-      }
-
-      await sbAdmin.from("profiles").upsert({
-        id: supabaseUserId,
-        stripe_customer_id: customerId,
-        stripe_subscription_id: subId,
-        subscription_status: status,
-        is_premium: status === "active" || status === "trialing",
-        current_period_end,
-        plan: plan || s.mode
-      });
+    if (!signature) {
+      return withCors(req, new Response('Missing stripe-signature header', { 
+        status: 400,
+        headers: { 'Content-Type': 'text/plain' }
+      }));
     }
 
-    // app/api/webhooks/route.js  (inside POST() after you init sbAdmin, stripe, etc.)
+    // Initialize Stripe client
+    const stripe = getStripeClient();
 
-if (
-    event.type === "customer.subscription.updated" ||
-    event.type === "customer.subscription.deleted" ||
-    event.type === "customer.subscription.created"
-  ) {
-    const sub = event.data.object;
-    const customerId = sub.customer;
-    const status = sub.status; // 'active' | 'trialing' | 'past_due' | 'canceled' | 'unpaid' | ...
-    const current_period_end = new Date(sub.current_period_end * 1000).toISOString();
-  
-    // find profile by customer id
-    const { data: rows, error: findErr } = await sbAdmin
-      .from("profiles")
-      .select("id")
-      .eq("stripe_customer_id", customerId)
-      .limit(1);
-  
-    if (findErr) {
-      console.error("profiles lookup failed:", findErr);
+    let event;
+    try {
+      event = stripe.webhooks.constructEvent(
+        body,
+        signature,
+        process.env.STRIPE_WEBHOOK_SECRET
+      );
+    } catch (err) {
+      console.error('Webhook signature verification failed:', err.message);
+      return withCors(req, new Response('Invalid signature', { 
+        status: 400,
+        headers: { 'Content-Type': 'text/plain' }
+      }));
     }
-  
-    if (rows?.[0]?.id) {
-      const premiumNow = status === "active" || status === "trialing";
-  
-      const { error: upErr } = await sbAdmin.from("profiles").upsert({
-        id: rows[0].id,
-        stripe_subscription_id: sub.id,
-        subscription_status: status,
-        is_premium: premiumNow,                 // ← always set based on status
-        current_period_end
-      });
-  
-      if (upErr) console.error("profiles upsert failed:", upErr);
+
+    // Handle the event
+    switch (event.type) {
+      case 'checkout.session.completed':
+        await handleCheckoutSessionCompleted(event.data.object);
+        break;
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated':
+        await handleSubscriptionUpdated(event.data.object);
+        break;
+      case 'customer.subscription.deleted':
+      case 'customer.subscription.paused':
+      case 'customer.subscription.resumed':
+        await handleSubscriptionUpdated(event.data.object);
+        break;
+      default:
+        console.log(`Unhandled event type: ${event.type}`);
     }
+
+    return withCors(req, new Response('Webhook processed successfully', { 
+      status: 200,
+      headers: { 'Content-Type': 'text/plain' }
+    }));
+  } catch (error) {
+    console.error('Webhook error:', error);
+    return withCors(req, new Response('Webhook processing failed', { 
+      status: 500,
+      headers: { 'Content-Type': 'text/plain' }
+    }));
   }
-  
+}
 
-    return NextResponse.json({ received: true });
-  } catch (e) {
-    console.error("webhook error:", e);
-    return new NextResponse("Webhook handler failed", { status: 500 });
+async function handleCheckoutSessionCompleted(session) {
+  try {
+    const stripe = getStripeClient();
+    const supabase = getSupabaseClient();
+    
+    const subscription = await stripe.subscriptions.retrieve(session.subscription);
+    const customer = await stripe.customers.retrieve(session.customer);
+    
+    // Find user by Stripe customer ID
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('stripe_customer_id', session.customer)
+      .single();
+
+    if (profile) {
+      await updateProfileFromSubscription(profile.id, subscription, customer);
+    }
+  } catch (error) {
+    console.error('Error handling checkout session completed:', error);
+  }
+}
+
+async function handleSubscriptionUpdated(subscription) {
+  try {
+    const stripe = getStripeClient();
+    const supabase = getSupabaseClient();
+    
+    const customer = await stripe.customers.retrieve(subscription.customer);
+    
+    // Find user by Stripe customer ID
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('stripe_customer_id', subscription.customer)
+      .single();
+
+    if (profile) {
+      await updateProfileFromSubscription(profile.id, subscription, customer);
+    }
+  } catch (error) {
+    console.error('Error handling subscription updated:', error);
+  }
+}
+
+async function updateProfileFromSubscription(userId, subscription, customer) {
+  try {
+    const supabase = getSupabaseClient();
+    
+    // Determine if user is premium based on subscription status
+    const isPremium = ['active', 'trialing'].includes(subscription.status);
+    
+    // Get plan name from subscription
+    const plan = subscription.items.data[0]?.price.recurring?.interval || null;
+    
+    // Calculate current period end
+    const currentPeriodEnd = new Date(subscription.current_period_end * 1000).toISOString();
+    
+    // Update profile
+    await supabase
+      .from('profiles')
+      .upsert({
+        id: userId,
+        is_premium: isPremium,
+        subscription_status: subscription.status,
+        current_period_end: currentPeriodEnd,
+        plan: plan,
+        stripe_customer_id: customer.id,
+        stripe_subscription_id: subscription.id,
+      });
+
+    console.log(`Updated profile for user ${userId}: premium=${isPremium}, status=${subscription.status}`);
+  } catch (error) {
+    console.error('Error updating profile from subscription:', error);
   }
 }
