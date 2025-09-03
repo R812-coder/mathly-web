@@ -141,4 +141,66 @@
     .hero-v2 h1{ font-size: 2rem; line-height: 1.15; }
     .hero-v2 .glass-card{ margin-top: 8px; }
   }
+  /* === Minimal UI kit (buttons, cards, inputs) === */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .5rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(15,23,42,.12);
+    padding: .625rem 1rem; /* 10px 16px */
+    font-weight: 600;
+    line-height: 1.2;
+    box-shadow: 0 1px 2px rgba(0,0,0,.04);
+    transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, opacity .15s ease, transform .02s ease;
+    background: #fff;
+    color: #0f172a;
+  }
+  .btn:hover { background: rgba(2,6,23,.03); }
+  .btn:disabled { opacity: .6; cursor: not-allowed; }
+  
+  .btn-primary {
+    background: #2563eb; /* blue-600 */
+    color: #fff;
+    border-color: rgba(37,99,235,.8);
+  }
+  .btn-primary:hover { background: #1d4ed8; }  /* blue-700 */
+  
+  .btn-ghost {
+    background: transparent;
+    border-color: transparent;
+  }
+  .btn-ghost:hover { background: rgba(2,6,23,.05); }
+  
+  .card {
+    background: #fff;
+    border: 1px solid rgba(15,23,42,.10);
+    border-radius: 1rem;
+    padding: 1rem;
+    box-shadow: 0 8px 30px rgba(0,0,0,.06);
+  }
+  
+  .input {
+    width: 100%;
+    border: 1px solid rgba(15,23,42,.12);
+    border-radius: .75rem;
+    padding: .625rem .875rem;
+    outline: none;
+  }
+  .input:focus-visible {
+    border-color: rgba(37,99,235,.45);
+    box-shadow: 0 0 0 3px rgba(37,99,235,.18);
+  }
+  
+  .link-btn {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    color: #2563eb;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .link-btn:hover { text-decoration: underline; }
   

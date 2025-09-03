@@ -1,117 +1,160 @@
-// app/checkout/CheckoutClient.jsx  (CLIENT FILE)
+// app/checkout/CheckoutClient.jsx
 "use client";
 
-import { useCallback, useMemo, useState, useEffect } from "react";
-import { supabase } from "../../lib/supabaseClient";
-
-const PRICE_M = process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY;
-const PRICE_Y = process.env.NEXT_PUBLIC_STRIPE_PRICE_YEARLY;
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { supabase } from "@/lib/supabaseClient";
+import { usePro } from "@/lib/usePro";
+import { goToCheckout, openPortal } from "@/lib/billing";
 
 export default function CheckoutClient() {
+  const { isPro } = usePro();
+  const [user, setUser] = useState(null);
+  const [busyPlan, setBusyPlan] = useState("");
+
+  // Read ?plan=monthly|yearly from URL (defaults to monthly)
   const [plan, setPlan] = useState("monthly");
-  const [msg, setMsg] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const priceId = useMemo(() => (plan === "yearly" ? PRICE_Y : PRICE_M), [plan]);
-
-  // Tiny confirmation + honor ?plan=
   useEffect(() => {
-    const sp = new URLSearchParams(window.location.search);
-
-    if (sp.get("signed_in") === "1") {
-      setMsg("You're signed in — pick a plan to continue.");
-      sp.delete("signed_in");
-      const u = new URL(window.location.href);
-      u.search = sp.toString();
-      window.history.replaceState({}, "", u.toString());
-    }
-
-    const p = sp.get("plan");
+    const p = new URLSearchParams(window.location.search).get("plan");
     if (p === "yearly" || p === "monthly") setPlan(p);
   }, []);
 
-  const startCheckout = useCallback(async () => {
-    setMsg("");
-    setLoading(true);
-
-    const { data: { session } = {} } = await supabase.auth.getSession();
-
-    const here = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-     if (!session?.access_token) {
-       const loginUrl = new URL('/login', window.location.origin);
-       loginUrl.searchParams.set('next', here); // let URL do the encoding ONCE
-       window.location.href = loginUrl.toString();
-       return;
-     }
-
-    try {
-      const r = await fetch(`/api/create-checkout-session`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ priceId }),
+  useEffect(() => {
+    let unsub = () => {};
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setUser(session?.user ?? null);
+      const sub = supabase.auth.onAuthStateChange((_e, s) => {
+        setUser(s?.user ?? null);
       });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok || !j?.url) throw new Error(j?.error || "No checkout url");
-      window.location.href = j.url;
+      unsub = () => sub.data.subscription.unsubscribe();
+    })();
+    return () => unsub();
+  }, []);
+
+  const handleUpgrade = async (which) => {
+    // If not logged in, send to /login?next=/checkout?plan=which
+    if (!user) {
+      const next = `/checkout?plan=${encodeURIComponent(which)}`;
+      window.location.href = `/login?next=${encodeURIComponent(next)}`;
+      return;
+    }
+    try {
+      setBusyPlan(which);
+      await goToCheckout(which);
     } catch (e) {
       console.error(e);
-      setMsg("Could not start checkout (network/CORS).");
-    } finally {
-      setLoading(false);
+      alert("Could not start checkout. Please try again.");
+      setBusyPlan("");
     }
-  }, [priceId]);
+  };
+
+  const priceCopy = useMemo(() => ({
+    monthly: { price: "$9", note: "/mo" },
+    yearly: { price: "$84", note: "/yr (save 22%)" }, // adjust to your Stripe prices
+  }), []);
 
   return (
-    <main className="container-nice py-16">
-      <header className="max-w-2xl">
-        <h1 className="text-3xl font-semibold tracking-tight">Upgrade to Pro</h1>
-        <p className="mt-2 text-gray-600">Unlimited solves • Priority speed • Step-by-step tutor</p>
-      </header>
+    <main className="container-nice py-14">
+      <div className="max-w-3xl">
+        <h1 className="text-3xl font-semibold tracking-tight">Choose your plan</h1>
+        <p className="mt-2 text-gray-600">Upgrade instantly. Cancel anytime.</p>
+      </div>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-2">
+      {/* If already PRO */}
+      {isPro ? (
+        <div className="mt-8 max-w-3xl rounded-2xl border bg-white p-6 shadow-soft">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-lg font-semibold flex items-center gap-2">
+                <span className="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ring-1 ring-black/10">
+                  PRO
+                </span>
+                You’re on Pro
+              </div>
+              <p className="mt-1 text-sm text-gray-600">
+                Enjoy unlimited solves and premium speed. You can manage your billing below.
+              </p>
+            </div>
+            <button onClick={openPortal} className="rounded-xl border px-5 py-3 hover:bg-black/5">
+              Manage subscription
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Plans */}
+      <div className="mt-8 grid gap-6 sm:grid-cols-2 max-w-3xl">
         {/* Monthly */}
-        <div className={`rounded-2xl border p-6 shadow-soft ${plan === "monthly" ? "ring-1 ring-blue-600/20" : ""}`}>
+        <div className={`rounded-2xl border p-6 ${plan === "monthly" ? "ring-1 ring-blue-600/20" : ""}`}>
           <div className="text-sm font-medium text-gray-500">Monthly</div>
-          <div className="mt-2 text-4xl font-semibold">
-            $9<span className="text-lg text-gray-500">/mo</span>
+          <div className="mt-2 text-3xl font-semibold">
+            {priceCopy.monthly.price}
+            <span className="text-lg text-gray-500">{priceCopy.monthly.note}</span>
           </div>
           <ul className="mt-4 space-y-2 text-sm text-gray-600">
-            <li>• Unlimited answers</li><li>• Better accuracy</li><li>• Priority solving speed</li>
+            <li>• Unlimited solves</li>
+            <li>• Better accuracy & speed</li>
+            <li>• Step-by-step tutor</li>
           </ul>
-          <button
-            onClick={() => { setPlan("monthly"); const u = new URL(window.location.href); u.searchParams.set("plan","monthly"); window.history.replaceState({}, "", u); startCheckout(); }}
-            disabled={loading}
-            className="mt-6 inline-flex items-center justify-center rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white shadow-soft hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {loading && plan === "monthly" ? "Loading…" : "Go to Checkout"}
-          </button>
+          <div className="mt-6 flex items-center gap-3">
+            <button
+              onClick={() => handleUpgrade("monthly")}
+              disabled={busyPlan === "monthly" || isPro}
+              className="rounded-xl bg-blue-600 text-white px-5 py-3 hover:bg-blue-700 shadow-soft disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {busyPlan === "monthly" ? "Starting checkout…" : "Upgrade monthly"}
+            </button>
+            <button
+              onClick={() => setPlan("monthly")}
+              className={`rounded-xl border px-5 py-3 hover:bg-black/5 ${plan === "monthly" ? "bg-black/5" : ""}`}
+            >
+              Select
+            </button>
+          </div>
         </div>
 
         {/* Yearly */}
         <div className={`rounded-2xl border p-6 ${plan === "yearly" ? "ring-1 ring-blue-600/20" : ""}`}>
-          <div className="text-sm font-medium text-gray-500">
-            Yearly <span className="ml-2 rounded bg-blue-50 px-2 py-0.5 text-blue-600">Save 44%</span>
-          </div>
-          <div className="mt-2 text-4xl font-semibold">
-            $4.99<span className="text-lg text-gray-500">/mo billed yearly</span>
+          <div className="text-sm font-medium text-blue-600">Yearly</div>
+          <div className="mt-2 text-3xl font-semibold">
+            {priceCopy.yearly.price}
+            <span className="text-lg text-gray-500">{priceCopy.yearly.note}</span>
           </div>
           <ul className="mt-4 space-y-2 text-sm text-gray-600">
-            <li>• Everything in Monthly</li><li>• Priority email support</li>
+            <li>• Unlimited solves</li>
+            <li>• Better accuracy & speed</li>
+            <li>• Step-by-step tutor</li>
           </ul>
-          <button
-            onClick={() => { setPlan("yearly"); const u = new URL(window.location.href); u.searchParams.set("plan","yearly"); window.history.replaceState({}, "", u); startCheckout(); }}
-            disabled={loading}
-            className="mt-6 inline-flex items-center justify-center rounded-xl border px-6 py-3 font-semibold hover:bg-black/5 disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {loading && plan === "yearly" ? "Loading…" : "Go to Checkout"}
-          </button>
+          <div className="mt-6 flex items-center gap-3">
+            <button
+              onClick={() => handleUpgrade("yearly")}
+              disabled={busyPlan === "yearly" || isPro}
+              className="rounded-xl bg-blue-600 text-white px-5 py-3 hover:bg-blue-700 shadow-soft disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {busyPlan === "yearly" ? "Starting checkout…" : "Upgrade yearly"}
+            </button>
+            <button
+              onClick={() => setPlan("yearly")}
+              className={`rounded-xl border px-5 py-3 hover:bg-black/5 ${plan === "yearly" ? "bg-black/5" : ""}`}
+            >
+              Select
+            </button>
+          </div>
         </div>
       </div>
 
-      {msg && <p className="mt-4 text-sm text-blue-700">{msg}</p>}
+      {/* Not logged in helper */}
+      {!user && !isPro && (
+        <p className="mt-6 text-sm text-gray-600">
+          You’ll be asked to log in first. Don’t worry—we’ll bring you right back here.
+        </p>
+      )}
+
+      {/* Safety links */}
+      <div className="mt-10 text-sm text-gray-500">
+        <Link className="hover:text-gray-900" href="/support">Need help?</Link>
+      </div>
     </main>
   );
 }

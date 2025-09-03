@@ -33,6 +33,7 @@ export default function HomePage() {
   >
     Upgrade to Pro
   </a>
+
   <span className="ml-1 text-sm text-gray-500">
     No credit card • 60-sec install
   </span>
